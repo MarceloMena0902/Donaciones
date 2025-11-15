@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+.input {
+  @apply w-full bg-transparent outline-none placeholder-gray-400 text-gray-700;
+}
+
+.submit-btn {
+  @apply w-full py-3 rounded-xl bg-gradient-to-r from-[#826c43] to-[#e66748] text-white font-semibold shadow-lg hover:scale-[1.02] transition-all duration-200 relative overflow-hidden;
+}
+
+@keyframes fadeUp {
+  0% { opacity: 0; transform: translateY(20px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeUp {
+  animation: fadeUp 0.7s ease-out;
+}
+
+@keyframes pop {
+  0% { transform: scale(0.5); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.animate-pop {
+  animation: pop 0.4s ease-out;
+}
+
+@keyframes pulseSlow {
+  0% { opacity: .5; transform: scale(1); }
+  50% { opacity: .85; transform: scale(1.1); }
+  100% { opacity: .5; transform: scale(1); }
+}
+
+.animate-pulseSlow {
+  animation: pulseSlow 4s infinite ease-in-out;
+}
+@keyframes fade-in {
+  0% { opacity: 0; transform: translateY(-5px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out forwards;
+}

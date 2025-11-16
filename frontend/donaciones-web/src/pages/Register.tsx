@@ -1,9 +1,11 @@
 import { Mail, Lock, Phone, Home, User, Image, ChevronDown } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import Swal from "sweetalert2";
 
 const Register = () => {
   const [preview, setPreview] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -14,7 +16,23 @@ const Register = () => {
   };
 
   const handleSocial = (provider: string) => {
-    console.log("Login con:", provider);
+    Swal.fire({
+      title: "Cuenta creada 🎉",
+      text: `Registro exitoso con ${provider}`,
+      icon: "success",
+      confirmButtonColor: "#826c43",
+    }).then(() => navigate("/dashboard"));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    Swal.fire({
+      title: "Cuenta creada 🎉",
+      text: "Tu registro fue exitoso",
+      icon: "success",
+      confirmButtonColor: "#826c43",
+    }).then(() => navigate("/dashboard"));
   };
 
   return (
@@ -33,7 +51,7 @@ const Register = () => {
         {/* Glow */}
         <div className="absolute -top-10 -right-10 w-40 h-40 bg-gradient-to-br from-[#e66748]/30 to-[#826c43]/20 rounded-full blur-3xl animate-pulseSlow"></div>
 
-        {/* TÍTULO */}
+        {/* Título */}
         <h2 className="text-3xl font-extrabold text-[#121212] text-center mb-2">
           Crear Cuenta
         </h2>
@@ -42,8 +60,9 @@ const Register = () => {
           Únete a la comunidad de donantes 🤝
         </p>
 
-        {/* SOCIAL LOGIN */}
+        {/* Social Login */}
         <div className="space-y-3 mb-8">
+
           {/* Google */}
           <button
             onClick={() => handleSocial("Google")}
@@ -78,26 +97,26 @@ const Register = () => {
         </div>
 
         {/* FORM */}
-        <form className="space-y-6">
+        <form className="space-y-6" onSubmit={handleSubmit}>
 
           {/* Nombre */}
           <Field label="Nombre Completo" icon={<User size={20} className="text-[#826c43]" />}>
-            <input type="text" placeholder="Tu nombre completo" className="input" />
+            <input type="text" placeholder="Tu nombre completo" className="input" required />
           </Field>
 
           {/* Correo */}
           <Field label="Correo Electrónico" icon={<Mail size={20} className="text-[#826c43]" />}>
-            <input type="email" placeholder="nombre@ejemplo.com" className="input" />
+            <input type="email" placeholder="nombre@ejemplo.com" className="input" required />
           </Field>
 
           {/* Contraseña */}
           <Field label="Contraseña" icon={<Lock size={20} className="text-[#826c43]" />}>
-            <input type="password" placeholder="••••••••" className="input" />
+            <input type="password" placeholder="••••••••" className="input" required />
           </Field>
 
           {/* Confirmar contraseña */}
           <Field label="Confirmar Contraseña" icon={<Lock size={20} className="text-[#826c43]" />}>
-            <input type="password" placeholder="Repite tu contraseña" className="input" />
+            <input type="password" placeholder="Repite tu contraseña" className="input" required />
           </Field>
 
           {/* Teléfono */}
@@ -114,7 +133,6 @@ const Register = () => {
           <div>
             <label className="block text-gray-700 font-medium mb-1">Foto de Perfil</label>
             <div className="flex items-center gap-3 bg-white border border-[#dccdbb] rounded-xl px-4 py-3 shadow-sm transition">
-
               <Image size={20} className="text-[#826c43]" />
 
               <input
@@ -135,22 +153,17 @@ const Register = () => {
             )}
           </div>
 
-          {/* Tipo de usuario */}
-          <Select label="Tipo de Usuario" options={["Donante", "Receptor"]} />
-
-          {/* Rol */}
-          <Select label="Rol" options={["Usuario", "Donante", "Voluntario"]} />
-
           {/* Submit */}
           <button className="submit-btn">Crear Cuenta</button>
 
-          {/* Ir a LOGIN */}
+          {/* Ir al login */}
           <p className="text-center mt-4 text-gray-600 text-sm">
             ¿Ya tienes una cuenta?{" "}
             <Link to="/login" className="text-[#e66748] font-semibold hover:underline">
               Inicia Sesión
             </Link>
           </p>
+
         </form>
       </div>
     </div>
@@ -169,25 +182,6 @@ const Field = ({ label, icon, children }: any) => (
     <div className="flex items-center gap-3 bg-white border border-[#dccdbb] rounded-xl px-4 py-3 shadow-sm focus-within:border-[#e66748] transition-all">
       {icon}
       {children}
-    </div>
-  </div>
-);
-
-const Select = ({ label, options }: any) => (
-  <div>
-    <label className="block text-gray-700 font-medium mb-1">{label}</label>
-
-    <div className="relative">
-      <select className="appearance-none w-full bg-white border border-[#dccdbb] rounded-xl px-4 py-3 shadow-sm outline-none text-gray-700 focus:border-[#e66748] transition">
-        <option value="">Seleccione…</option>
-        {options.map((o: string) => (
-          <option value={o} key={o}>
-            {o}
-          </option>
-        ))}
-      </select>
-
-      <ChevronDown className="absolute right-4 top-3.5 text-gray-500" size={20} />
     </div>
   </div>
 );

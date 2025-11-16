@@ -11,7 +11,11 @@ import CreateDonation from "./pages/CreateDonation";
 import DonationDetails from "./pages/DonationDetails";
 import EditDonation from "./pages/EditDonation";
 import DeleteDonation from "./pages/DeleteDonation";
+import DonationView from "./pages/DonationView ";
+import ChatWindow from "./pages/ChatWindow";
+import ProfileView from "./pages/ProfileView";
 
+import ForgotPassword from "./pages/ForgotPassword";
 function App() {
   return (
     <Routes>
@@ -30,6 +34,13 @@ function App() {
       <Route path="/donations/:id" element={<DonationDetails />} />
       <Route path="/donations/:id/editar" element={<EditDonation />} />
       <Route path="/donations/:id/eliminar" element={<DeleteDonation />} />
+      <Route path="/donation/:id" element={<DonationView />} />
+      <Route path="/chat/:donorId" element={<ChatWindow />} />
+
+
+      <Route path="/perfil" element={<ProfileView />} />
+      <Route path="/forgot-password" element={<ForgotPassword />} />
+
 
     </Routes>
   );

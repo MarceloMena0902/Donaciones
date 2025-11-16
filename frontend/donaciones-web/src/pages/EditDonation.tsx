@@ -36,10 +36,12 @@ type DonationForm = {
   direccion: string;
   lat: number | null;
   lng: number | null;
+  estado: string; // NUEVO ✔
 };
 
 const unidades = ["kg", "L", "unidad", "caja"];
 
+// Mock inicial DONACIÓN YA EXISTENTE
 // Mock inicial DONACIÓN YA EXISTENTE
 const initialDonation: DonationForm = {
   tipo: "Perecedero",
@@ -51,6 +53,9 @@ const initialDonation: DonationForm = {
   direccion: "Av. Heroínas 123, Cochabamba",
   lat: -17.3895,
   lng: -66.1568,
+
+  // ✔ ESTADO POR DEFECTO
+  estado: "Disponible",
 };
 
 const EditDonation = () => {
@@ -77,7 +82,13 @@ const EditDonation = () => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!form.tipo || !form.descripcion || !form.unidad || !form.lat || !form.lng) {
+    if (
+      !form.tipo ||
+      !form.descripcion ||
+      !form.unidad ||
+      !form.lat ||
+      !form.lng
+    ) {
       Swal.fire({
         icon: "error",
         title: "Campos incompletos",
@@ -127,7 +138,9 @@ const EditDonation = () => {
               <Heart className="text-[#826c43]" />
               Editar Donación
             </h1>
-            <p className="text-gray-600 mt-2">Actualiza la información de tu donación existente.</p>
+            <p className="text-gray-600 mt-2">
+              Actualiza la información de tu donación existente.
+            </p>
           </div>
 
           {/* FORM */}
@@ -142,6 +155,7 @@ const EditDonation = () => {
               </h2>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                {/* Tipo */}
                 <div>
                   <label className="font-semibold text-gray-700 flex items-center gap-2 mb-2">
                     <Apple size={18} /> Tipo de alimento
@@ -158,6 +172,7 @@ const EditDonation = () => {
                   </select>
                 </div>
 
+                {/* Fecha */}
                 <div>
                   <label className="font-semibold text-gray-700 flex items-center gap-2 mb-2">
                     <Calendar size={18} /> Fecha de caducidad
@@ -173,6 +188,7 @@ const EditDonation = () => {
                 </div>
               </div>
 
+              {/* Descripción */}
               <div className="mt-6">
                 <label className="font-semibold text-gray-700 flex items-center gap-2 mb-2">
                   <Info size={18} /> Descripción
@@ -188,6 +204,7 @@ const EditDonation = () => {
                 />
               </div>
 
+              {/* Cantidad + Unidad */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                 <div>
                   <label className="font-semibold text-gray-700 flex items-center gap-2 mb-2">
@@ -263,6 +280,103 @@ const EditDonation = () => {
               </p>
             </section>
 
+            {/* ESTADO DE LA DONACIÓN */}
+            <section className="mb-8 bg-[#faf6f1] border border-[#e5dacb] rounded-xl p-6">
+              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2 mb-5">
+                <Heart className="text-[#826c43]" /> Estado de Disponibilidad
+              </h2>
+
+              <p className="text-gray-600 mb-4">
+                Marca el estado actual de tu donación. Esto actualizará automáticamente el mapa.
+              </p>
+
+              <div className="flex flex-col md:flex-row gap-4">
+{/* Disponible */}
+<label
+  className={`flex items-center gap-3 p-4 rounded-xl cursor-pointer border shadow-sm transition
+    ${
+      form.estado === "Disponible"
+        ? "bg-[#dbeafe] border-blue-600"
+        : "bg-white border-[#dccdbb] hover:bg-[#f4ebdf]"
+    }`}
+>
+  <input
+    type="radio"
+    name="estado"
+    value="Disponible"
+    checked={form.estado === "Disponible"}
+    onChange={(e) => setForm({ ...form, estado: e.target.value })}
+  />
+  <span className="font-semibold text-gray-700">Disponible</span>
+</label>
+
+                {/* Reservada */}
+                <label
+                  className={`flex items-center gap-3 p-4 rounded-xl cursor-pointer border shadow-sm transition
+                    ${
+                      form.estado === "Reservada"
+                        ? "bg-[#ffe9c9] border-[#e66748]"
+                        : "bg-white border-[#dccdbb] hover:bg-[#f4ebdf]"
+                    }`}
+                >
+                  <input
+                    type="radio"
+                    name="estado"
+                    value="Reservada"
+                    checked={form.estado === "Reservada"}
+                    onChange={(e) =>
+                      setForm({ ...form, estado: e.target.value })
+                    }
+                  />
+                  <span className="font-semibold text-gray-700">Reservada</span>
+                </label>
+
+                {/* Entregada */}
+                <label
+                  className={`flex items-center gap-3 p-4 rounded-xl cursor-pointer border shadow-sm transition
+                    ${
+                      form.estado === "Entregada"
+                        ? "bg-[#d8f3d3] border-green-600"
+                        : "bg-white border-[#dccdbb] hover:bg-[#f4ebdf]"
+                    }`}
+                >
+                  <input
+                    type="radio"
+                    name="estado"
+                    value="Entregada"
+                    checked={form.estado === "Entregada"}
+                    onChange={(e) =>
+                      setForm({ ...form, estado: e.target.value })
+                    }
+                  />
+                  <span className="font-semibold text-gray-700">Entregada</span>
+                </label>
+
+                {/* Cancelada */}
+                <label
+                  className={`flex items-center gap-3 p-4 rounded-xl cursor-pointer border shadow-sm transition
+                    ${
+                      form.estado === "Cancelada"
+                        ? "bg-[#f9d6d2] border-red-600"
+                        : "bg-white border-[#dccdbb] hover:bg-[#f4ebdf]"
+                    }`}
+                >
+                  <input
+                    type="radio"
+                    name="estado"
+                    value="Cancelada"
+                    checked={form.estado === "Cancelada"}
+                    onChange={(e) =>
+                      setForm({ ...form, estado: e.target.value })
+                    }
+                  />
+                  <span className="font-semibold text-gray-700">
+                    Cancelada
+                  </span>
+                </label>
+              </div>
+            </section>
+
             {/* IMÁGENES */}
             <section className="mb-8 bg-[#faf6f1] border border-[#e5dacb] rounded-xl p-6">
               <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2 mb-5">
@@ -271,9 +385,14 @@ const EditDonation = () => {
 
               <div
                 className="border-2 border-dashed border-[#826c43] rounded-xl p-10 text-center cursor-pointer hover:bg-[#f0e8dd] transition"
-                onClick={() => document.getElementById("imageInputEdit")?.click()}
+                onClick={() =>
+                  document.getElementById("imageInputEdit")?.click()
+                }
               >
-                <CloudUpload size={55} className="mx-auto text-[#826c43] mb-3" />
+                <CloudUpload
+                  size={55}
+                  className="mx-auto text-[#826c43] mb-3"
+                />
                 <p className="font-semibold text-gray-700">
                   Arrastra nuevas imágenes aquí
                 </p>
@@ -288,7 +407,9 @@ const EditDonation = () => {
                 accept="image/*"
                 multiple
                 className="hidden"
-                onChange={(e) => e.target.files && handleImageUpload(e.target.files)}
+                onChange={(e) =>
+                  e.target.files && handleImageUpload(e.target.files)
+                }
               />
 
               {images.length > 0 && (

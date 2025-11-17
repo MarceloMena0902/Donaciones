@@ -6,122 +6,156 @@ import {
   MessageSquare,
   X,
 } from "lucide-react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import NavbarLogged from "../components/NavbarLogged";
+import { useAuth } from "../context/AuthContext";
+import axios from "axios";
+
+// Firebase Realtime Database
+import { realtimeDb } from "../firebaseConfig";
+import { ref, onValue, push, set } from "firebase/database";
+
+const API_URL = "http://localhost:4000/api/messages";
 
 const ChatWindow = () => {
-const { id } = useParams();
+  const { user } = useAuth(); // usuario logueado
 
-// limpiar ID si viene con query (999?name=Jesus)
-const rawId = id?.split("?")[0];
-  const query = new URLSearchParams(window.location.search);
-  const donorName = query.get("name"); // nombre opcional
-const chatID = Number(rawId);
+  // Este ID viene de DonationView: userId del donante
+  const { id: otherUserId } = useParams();
+  const [searchParams] = useSearchParams();
+  const donorName = searchParams.get("name");
+console.log("🟥 DEBUG ChatWindow ----------------");
+console.log("user.uid =", user?.uid);
+console.log("otherUserId =", otherUserId);
+console.log("donorName =", donorName);
+console.log("----------------------------------");
+  // ---------------------------------------------------------
+  // CHAT ID entre ambos UIDs
+  // ---------------------------------------------------------
+  const chatId =
+    user && otherUserId ? [user.uid, otherUserId].sort().join("_") : null;
 
-  // -------------------------------
-  // LISTA DE CHATS (mock INICIAL)
-  // -------------------------------
-  const [chats, setChats] = useState([
-    { id: 1, name: "Jesús Espejo", lastMsg: "Gracias por escribir", unread: 2 },
-    { id: 2, name: "María Lopez", lastMsg: "Perfecto, te aviso", unread: 0 },
-    { id: 3, name: "Carlos Méndez", lastMsg: "¿Cuándo puedes pasar?", unread: 5 },
-  ]);
-
-  const [selectedChat, setSelectedChat] = useState<number | null>(null);
-
-  // -------------------------------------------
-  // 🔥 ABRIR O CREAR CHAT AUTOMÁTICAMENTE
-  // -------------------------------------------
-useEffect(() => {
-  if (!rawId) return;
-
-  const existing = chats.find((c) => c.id === chatID);
-
-  if (existing) {
-    setSelectedChat(chatID);
-  } else {
-    const newChat = {
-      id: chatID,
-      name: donorName || `Contacto ${chatID}`,
-      lastMsg: "Aún no hay mensajes",
-      unread: 0,
-    };
-
-    setChats((prev) => [...prev, newChat]);
-    setSelectedChat(chatID);
-  }
-}, [rawId, donorName, chats.length]);
-
-
-
-  // -------------------------------
-  // MENSAJES
-  // -------------------------------
-  const [messages, setMessages] = useState<any[]>([
-    {
-      id: 1,
-      chatId: 1,
-      sender: "donor",
-      type: "text",
-      content: "Hola, ¿en qué puedo ayudarte?",
-      time: "09:45 AM",
-    },
-  ]);
-
+  // ---------------------------------------------------------
+  // ESTADOS
+  // ---------------------------------------------------------
+  const [messages, setMessages] = useState<any[]>([]);
   const [text, setText] = useState("");
   const [preview, setPreview] = useState<any | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // -------------------------------
-  // Adjuntar archivo
-  // -------------------------------
+  // ---------------------------------------------------------
+  // 1) CARGAR HISTORIAL DESDE BACKEND
+  // ---------------------------------------------------------
+  const loadHistory = async () => {
+    if (!chatId) return;
+
+    try {
+      const res = await axios.get(`${API_URL}/${chatId}`);
+      const data = res.data || {};
+
+      const formatted = Object.values(data).map((msg: any) => ({
+        id: msg.timestamp,
+        sender: msg.senderId === user?.uid ? "me" : "them",
+        type: "text",
+        content: msg.content,
+        time: new Date(msg.timestamp).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      }));
+
+      setMessages(formatted);
+    } catch (err) {
+      console.log("❌ Error cargando historial:", err);
+    }
+  };
+
+  useEffect(() => {
+    loadHistory();
+  }, [chatId]);
+
+  // ---------------------------------------------------------
+  // 2) ESCUCHAR MENSAJES EN TIEMPO REAL
+  // ---------------------------------------------------------
+  useEffect(() => {
+    if (!chatId) return;
+
+    const chatRef = ref(realtimeDb, `chats/${chatId}`);
+
+    return onValue(chatRef, (snapshot) => {
+      const data = snapshot.val();
+      if (!data) return;
+
+      const formatted = Object.values(data).map((msg: any) => ({
+        id: msg.timestamp,
+        sender: msg.senderId === user?.uid ? "me" : "them",
+        type: "text",
+        content: msg.content,
+        time: new Date(msg.timestamp).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      }));
+
+      setMessages(formatted);
+    });
+  }, [chatId]);
+
+  // ---------------------------------------------------------
+  // 3) Adjuntar archivo
+  // ---------------------------------------------------------
   const handleFile = (e: any) => {
     const file = e.target.files[0];
     if (!file) return;
 
-    let type = "file";
-    let previewUrl = null;
-
-    if (file.type.startsWith("image/")) {
-      type = "image";
-      previewUrl = URL.createObjectURL(file);
-    } else if (file.type.startsWith("video/")) {
-      type = "video";
-      previewUrl = URL.createObjectURL(file);
-    }
-
     setPreview({
       raw: file,
-      type,
-      preview: previewUrl,
+      type: "file",
+      preview: URL.createObjectURL(file),
       name: file.name,
       size: (file.size / 1024).toFixed(1) + " KB",
     });
   };
 
-  // -------------------------------
-  // Enviar mensaje
-  // -------------------------------
-  const sendMessage = () => {
-    if (!text && !preview) return;
+  // ---------------------------------------------------------
+  // 4) ENVIAR MENSAJE
+  // ---------------------------------------------------------
+  const sendMessage = async () => {
+    if (!chatId) {
+      console.log("❌ chatId es null – no se puede enviar mensaje");
+      return;
+    }
 
-    const newMsg = {
-      id: Date.now(),
-      chatId: selectedChat,
-      sender: "me",
-      type: preview?.type || "text",
-      content: preview?.preview || text,
-      name: preview?.name,
-      size: preview?.size,
-      time: new Date().toLocaleTimeString([], {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
+    if (!text && !preview) {
+      console.log("❌ mensaje vacío");
+      return;
+    }
+
+    const newMessage = {
+      chatId,
+      senderId: user?.uid,
+      receiverId: otherUserId, // usuario donante REAL
+      content: preview ? preview.name : text,
+      timestamp: Date.now(),
     };
 
-    setMessages((prev) => [...prev, newMsg]);
-    setText("");
-    setPreview(null);
+    console.log("🔥 ENVIANDO MENSAJE:", newMessage);
+
+    try {
+      // Guardar en Firebase realtime
+      const chatRef = ref(realtimeDb, `chats/${chatId}`);
+      const newMsgRef = push(chatRef);
+      await set(newMsgRef, newMessage);
+
+      // Limpiar input
+      setText("");
+      setPreview(null);
+
+      // Guardar historial en backend (opcional)
+      await axios.post(API_URL, newMessage);
+    } catch (err) {
+      console.log("❌ Error enviando mensaje:", err);
+    }
   };
 
   return (
@@ -129,179 +163,89 @@ useEffect(() => {
       <NavbarLogged />
 
       <div className="pt-24 pb-10 max-w-7xl mx-auto px-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-
+        
         {/* PANEL IZQUIERDO */}
-        <div className="col-span-1 bg-white rounded-3xl shadow-xl border border-[#e4d7c5] p-5 h-[75vh] flex flex-col">
-          <h2 className="text-xl font-bold text-[#121212] mb-4 flex items-center gap-2">
-            <MessageSquare /> Tus Chats
+        <div className="col-span-1 bg-white rounded-3xl shadow-xl border p-5 h-[75vh] flex flex-col">
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <MessageSquare /> Chat con
           </h2>
 
-          <div className="flex-1 overflow-y-auto space-y-3 pr-2">
-            {chats.map((chat) => (
-              <button
-                key={chat.id}
-                onClick={() => setSelectedChat(chat.id)}
-                className={`w-full p-4 rounded-2xl shadow border flex justify-between items-center transition 
-                  ${
-                    selectedChat === chat.id
-                      ? "bg-gradient-to-r from-[#826c43]/20 to-[#e66748]/20 border-[#e66748]"
-                      : "bg-[#fff8f0] border-[#e4d7c5] hover:bg-[#ffeeda]"
-                  }`}
-              >
-                <div className="text-left">
-                  <p className="font-semibold text-gray-800">{chat.name}</p>
-                  <p className="text-sm text-gray-600">{chat.lastMsg}</p>
-                </div>
-
-                {chat.unread > 0 && (
-                  <span className="bg-[#e66748] text-white text-sm w-7 h-7 flex items-center justify-center rounded-full font-bold shadow">
-                    {chat.unread}
-                  </span>
-                )}
-              </button>
-            ))}
+          <div className="mt-2 bg-[#fff5e5] p-3 rounded-xl text-lg font-semibold text-[#826c43]">
+            {donorName}
           </div>
         </div>
 
         {/* PANEL DERECHO */}
-        <div className="col-span-2 bg-white rounded-3xl shadow-xl border border-[#e4d7c5] p-6 h-[75vh] flex flex-col">
+        <div className="col-span-2 bg-white rounded-3xl shadow-xl border p-6 h-[75vh] flex flex-col">
 
-          {/* PLACEHOLDER SI NO HAY CHAT */}
-          {!selectedChat && (
-            <div className="flex flex-col items-center justify-center h-full opacity-80">
-              <h2 className="text-3xl font-bold text-[#121212] mb-2">
-                cuba_project
-              </h2>
-              <p className="text-gray-600 text-center max-w-md leading-relaxed">
-                Envía y recibe mensajes con otros donantes y receptores.
-                Conecta, coordina y ayuda a que las donaciones lleguen a quienes más lo necesitan.
-              </p>
+          {/* MENSAJES */}
+          <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`flex ${msg.sender === "me" ? "justify-end" : "justify-start"}`}
+              >
+                <div
+                  className={`max-w-[65%] p-3 rounded-2xl shadow ${
+                    msg.sender === "me"
+                      ? "bg-gradient-to-r from-[#826c43] to-[#e66748] text-white"
+                      : "bg-[#fff8f0] text-gray-800"
+                  }`}
+                >
+                  <p>{msg.content}</p>
+                  <p className="text-xs opacity-60 mt-1">{msg.time}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* PREVIEW */}
+          {preview && (
+            <div className="my-4 flex items-center gap-4 bg-[#fff1e0] p-3 rounded-xl border">
+              <div className="flex items-center gap-2">
+                <FileIcon />
+                <div>
+                  <p>{preview.name}</p>
+                  <p className="text-sm">{preview.size}</p>
+                </div>
+              </div>
+
+              <button
+                onClick={() => setPreview(null)}
+                className="text-red-600 hover:scale-125 transition"
+              >
+                <X size={22} />
+              </button>
             </div>
           )}
 
-          {/* CHAT ABIERTO */}
-          {selectedChat && (
-            <>
-              {/* HEADER */}
-              <div className="pb-4 border-b border-[#e4d7c5] mb-4">
-                <h2 className="text-2xl font-bold text-[#121212]">
-                  {chats.find((c) => c.id === selectedChat)?.name}
-                </h2>
-              </div>
+          {/* INPUT */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="p-3 rounded-xl border bg-[#fff8f0] hover:bg-[#ffe6d1] transition"
+            >
+              <Paperclip />
+            </button>
 
-              {/* MENSAJES */}
-              <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-                {messages
-                  .filter((m) => m.chatId === selectedChat)
-                  .map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={`flex ${
-                        msg.sender === "me"
-                          ? "justify-end"
-                          : "justify-start"
-                      }`}
-                    >
-                      <div
-                        className={`max-w-[65%] p-3 rounded-2xl shadow 
-                          ${
-                            msg.sender === "me"
-                              ? "bg-gradient-to-r from-[#826c43] to-[#e66748] text-white"
-                              : "bg-[#fff8f0] text-gray-800"
-                          }`}
-                      >
-                        {msg.type === "text" && <p>{msg.content}</p>}
+            <input ref={fileRef} type="file" className="hidden" onChange={handleFile} />
 
-                        {msg.type === "image" && (
-                          <img
-                            src={msg.content}
-                            className="rounded-xl max-h-64"
-                          />
-                        )}
+            <input
+              type="text"
+              placeholder="Escribe un mensaje..."
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              className="flex-1 px-4 py-3 border rounded-xl shadow-sm outline-none"
+            />
 
-                        {msg.type === "video" && (
-                          <video controls className="rounded-xl max-h-64">
-                            <source src={msg.content} />
-                          </video>
-                        )}
+            <button
+              onClick={sendMessage}
+              className="px-5 py-3 rounded-xl bg-gradient-to-r from-[#826c43] to-[#e66748] text-white shadow hover:scale-[1.05]"
+            >
+              <Send />
+            </button>
+          </div>
 
-                        {msg.type === "file" && (
-                          <div className="flex items-center gap-3">
-                            <FileIcon />
-                            <div>
-                              <p className="font-semibold">{msg.name}</p>
-                              <p className="text-sm opacity-70">{msg.size}</p>
-                            </div>
-                          </div>
-                        )}
-
-                        <p className="text-xs opacity-60 mt-1">{msg.time}</p>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-
-              {/* PREVIEW */}
-              {preview && (
-                <div className="my-4 flex items-center gap-4 bg-[#fff1e0] p-3 rounded-xl border border-[#e4d7c5]">
-                  {preview.type === "image" && (
-                    <img src={preview.preview} className="h-20 rounded-lg" />
-                  )}
-                  {preview.type === "video" && (
-                    <video src={preview.preview} className="h-20 rounded-lg" />
-                  )}
-                  {preview.type === "file" && (
-                    <div className="flex items-center gap-2">
-                      <FileIcon />
-                      <div>
-                        <p>{preview.name}</p>
-                        <p className="text-sm">{preview.size}</p>
-                      </div>
-                    </div>
-                  )}
-                  <button
-                    onClick={() => setPreview(null)}
-                    className="text-red-600 hover:scale-125 transition"
-                  >
-                    <X size={22} />
-                  </button>
-                </div>
-              )}
-
-              {/* INPUT */}
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => fileRef.current?.click()}
-                  className="p-3 rounded-xl border border-[#e4d7c5] bg-[#fff8f0] hover:bg-[#ffe6d1] transition"
-                >
-                  <Paperclip />
-                </button>
-
-                <input
-                  ref={fileRef}
-                  type="file"
-                  className="hidden"
-                  accept="image/*,video/*,application/pdf,.zip,.doc,.docx"
-                  onChange={handleFile}
-                />
-
-                <input
-                  type="text"
-                  placeholder="Escribe un mensaje..."
-                  value={text}
-                  onChange={(e) => setText(e.target.value)}
-                  className="flex-1 px-4 py-3 border border-[#e4d7c5] rounded-xl bg-white shadow-sm outline-none"
-                />
-
-                <button
-                  onClick={sendMessage}
-                  className="px-5 py-3 rounded-xl bg-gradient-to-r from-[#826c43] to-[#e66748] text-white shadow hover:scale-[1.05] transition"
-                >
-                  <Send />
-                </button>
-              </div>
-            </>
-          )}
         </div>
       </div>
     </div>

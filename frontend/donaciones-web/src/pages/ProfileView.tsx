@@ -1,20 +1,42 @@
 import { useState, useRef } from "react";
 import NavbarLogged from "../components/NavbarLogged";
 import { Edit3, Save, Camera, Lock, X } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 
 const ProfileView = () => {
-  // Datos mock
+  const { user, loading } = useAuth();
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Mientras carga Firebase, mostrar loading
+  if (loading) {
+    return (
+      <div className="min-h-screen flex justify-center items-center text-xl">
+        Cargando perfil...
+      </div>
+    );
+  }
+
+  // Si no hay usuario logueado
+  if (!user) {
+    return (
+      <div className="min-h-screen flex justify-center items-center text-xl">
+        No has iniciado sesión.
+      </div>
+    );
+  }
+
+  // Estado inicial basado en el usuario real
   const [profile, setProfile] = useState({
-    name: "Ignacio Benavides",
-    email: "ignacio@example.com",
-    phone: "71234567",
+    name: user.displayName || "",
+    email: user.email || "",
+    phone: "",
     avatar:
-      "https://i.pinimg.com/736x/7d/83/06/7d8306f69f8f0f39ce23e7ed0aa35e5e.jpg",
+      user.photoURL ||
+      "https://cdn-icons-png.flaticon.com/512/149/149071.png", // default avatar
   });
 
   const [editing, setEditing] = useState(false);
   const [showPassModal, setShowPassModal] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
 
   const [passwordData, setPasswordData] = useState({
     oldPass: "",
@@ -22,7 +44,7 @@ const ProfileView = () => {
     confirmPass: "",
   });
 
-  // Cambiar foto
+  // Cambiar foto (solo visual)
   const handlePhoto = (e: any) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -30,6 +52,7 @@ const ProfileView = () => {
     setProfile((prev) => ({ ...prev, avatar: preview }));
   };
 
+  // Guardar perfil (aún no incluye backend)
   const saveProfile = () => {
     setEditing(false);
   };
@@ -39,8 +62,7 @@ const ProfileView = () => {
       alert("Las contraseñas no coinciden.");
       return;
     }
-    alert("Contraseña actualizada ✨ (más adelante se conecta al backend)");
-    setPasswordData({ oldPass: "", newPass: "", confirmPass: "" });
+    alert("Contraseña actualizada ✨ (pronto se conecta al backend)");
     setShowPassModal(false);
   };
 
@@ -52,7 +74,7 @@ const ProfileView = () => {
 
         {/* CARD PRINCIPAL */}
         <div className="bg-white rounded-3xl shadow-xl p-10 border border-[#e4d7c5] relative">
-<div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#826c43] to-[#e66748] rounded-t-3xl" />
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#826c43] to-[#e66748]" />
 
           {/* FOTO */}
           <div className="flex flex-col items-center">
@@ -84,7 +106,6 @@ const ProfileView = () => {
               {profile.name}
             </h1>
 
-            {/* BOTÓN EDITAR */}
             {!editing ? (
               <button
                 onClick={() => setEditing(true)}
@@ -104,7 +125,6 @@ const ProfileView = () => {
 
           {/* CAMPOS PERFIL */}
           <div className="mt-10 space-y-6">
-
             <div>
               <p className="font-semibold text-gray-700 mb-1">Nombre completo</p>
               <input
@@ -124,14 +144,9 @@ const ProfileView = () => {
               <p className="font-semibold text-gray-700 mb-1">Correo electrónico</p>
               <input
                 type="email"
-                disabled={!editing}
+                disabled={true} // email no editable aquí
                 value={profile.email}
-                onChange={(e) =>
-                  setProfile((prev) => ({ ...prev, email: e.target.value }))
-                }
-                className={`w-full px-4 py-3 rounded-xl border ${
-                  editing ? "bg-white border-[#e4d7c5]" : "bg-[#faf6f1] text-gray-600"
-                } shadow-sm outline-none`}
+                className="w-full px-4 py-3 rounded-xl border bg-[#faf6f1] text-gray-600 shadow-sm outline-none"
               />
             </div>
 
@@ -163,17 +178,15 @@ const ProfileView = () => {
         </div>
       </div>
 
-      {/* -------------------------------- */}
-      {/* 💛 MODAL CAMBIAR CONTRASEÑA */}
-      {/* -------------------------------- */}
+      {/* MODAL CONTRASEÑA */}
       {showPassModal && (
         <div
           className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center px-4 z-50"
-          onClick={() => setShowPassModal(false)} // cerrar al click afuera
+          onClick={() => setShowPassModal(false)}
         >
           <div
             className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-8 border border-[#e4d7c5] relative animate-fadeIn"
-            onClick={(e) => e.stopPropagation()} // evitar cierre por click dentro
+            onClick={(e) => e.stopPropagation()}
           >
             {/* BOTÓN X */}
             <button
@@ -187,13 +200,10 @@ const ProfileView = () => {
               <Lock /> Cambiar Contraseña
             </h2>
 
-            {/* FORMULARIO */}
+            {/* FORM */}
             <div className="space-y-5">
-
               <div>
-                <p className="font-semibold text-gray-700 mb-1">
-                  Contraseña actual
-                </p>
+                <p className="font-semibold text-gray-700 mb-1">Contraseña actual</p>
                 <input
                   type="password"
                   value={passwordData.oldPass}
@@ -208,9 +218,7 @@ const ProfileView = () => {
               </div>
 
               <div>
-                <p className="font-semibold text-gray-700 mb-1">
-                  Nueva contraseña
-                </p>
+                <p className="font-semibold text-gray-700 mb-1">Nueva contraseña</p>
                 <input
                   type="password"
                   value={passwordData.newPass}
@@ -225,9 +233,7 @@ const ProfileView = () => {
               </div>
 
               <div>
-                <p className="font-semibold text-gray-700 mb-1">
-                  Confirmar contraseña
-                </p>
+                <p className="font-semibold text-gray-700 mb-1">Confirmar contraseña</p>
                 <input
                   type="password"
                   value={passwordData.confirmPass}

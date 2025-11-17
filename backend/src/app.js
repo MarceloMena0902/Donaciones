@@ -5,6 +5,7 @@ import donationsRoutes from "./routes/donations.routes.js";
 import notificationsRoutes from "./routes/notifications.routes.js";
 import messagesRoutes from "./routes/messages.routes.js";
 import authRoutes from "./routes/auth.routes.js";
+import uploadRoutes from "./routes/upload.routes.js";
 
 const app = express();
 
@@ -20,5 +21,7 @@ app.use("/api/donations", donationsRoutes);
 app.use("/api/notifications", notificationsRoutes);
 app.use("/api/messages", messagesRoutes);
 app.use("/api/auth", authRoutes);
+app.use(cors({ origin: "http://localhost:5173" }));
+app.use("/api/upload", uploadRoutes);
 
 export default app;

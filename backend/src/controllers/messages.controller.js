@@ -23,7 +23,7 @@ export const sendMessage = async (req, res) => {
   }
 };
 
-// Obtener historial de un chat
+// Obtener mensajes del chat
 export const getMessages = async (req, res) => {
   try {
     const { chatId } = req.params;

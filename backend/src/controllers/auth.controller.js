@@ -4,6 +4,8 @@ import { auth, db } from "../config/firebase.js";
 // Registro con correo y contraseña
 export const registerUser = async (req, res) => {
   try {
+    console.log("📥 BODY RECIBIDO:", req.body);
+
     const { name, email, password, phone, address, photoUrl } = req.body;
 
     if (!email || !password || !name) {
@@ -12,22 +14,37 @@ export const registerUser = async (req, res) => {
       });
     }
 
-    // Crear usuario en Firebase Auth
+    // 🔹 Si se envía una foto, validar que sea una URL válida
+    const validPhotoUrl =
+      photoUrl && photoUrl.startsWith("http") ? photoUrl : undefined;
+
+    // 🔹 Verificar si el correo ya existe en Firebase
+    let existingUser;
+    try {
+      existingUser = await auth.getUserByEmail(email);
+    } catch (err) {
+      existingUser = null;
+    }
+    if (existingUser) {
+      return res.status(400).json({ error: "El correo ya está registrado." });
+    }
+
+    // 🔹 Crear usuario en Firebase Auth
     const userRecord = await auth.createUser({
       email,
       password,
       displayName: name,
-      photoURL: photoUrl || null,
+      photoURL: validPhotoUrl, // Evita el error "The photoURL must be a valid URL"
     });
 
-    // Guardar datos extra en Firestore
+    // 🔹 Guardar datos extra en Firestore
     await db.collection("users").doc(userRecord.uid).set({
       uid: userRecord.uid,
       name,
       email,
       phone: phone || "",
       address: address || "",
-      photoUrl: photoUrl || "",
+      photoUrl: validPhotoUrl || "",
       provider: "email",
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -39,6 +56,7 @@ export const registerUser = async (req, res) => {
         uid: userRecord.uid,
         email: userRecord.email,
         name: userRecord.displayName,
+        photoUrl: validPhotoUrl || "",
       },
     });
   } catch (error) {
@@ -73,15 +91,15 @@ export const loginWithFirebase = async (req, res) => {
         .json({ error: "Faltan datos (idToken o provider)." });
     }
 
-    // 1️Verificar token
+    // 1️ Verificar token
     const decodedToken = await auth.verifyIdToken(idToken);
     const uid = decodedToken.uid;
 
-    // 2️Obtener datos del usuario
+    // 2️ Obtener datos del usuario
     const userRecord = await auth.getUser(uid);
     const { email, displayName, photoURL } = userRecord;
 
-    // 3️Guardar/actualizar Firestore
+    // 3️ Guardar/actualizar Firestore
     const userRef = db.collection("users").doc(uid);
     await userRef.set(
       {

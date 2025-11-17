@@ -1,6 +1,8 @@
 import { Bell, LogOut, Menu, Send, User, MapPin, ListChecks } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
+import { useAuth } from "../context/AuthContext";
+
 
 type Notificacion = {
   message: string;
@@ -8,8 +10,12 @@ type Notificacion = {
   read: boolean;
 };
 
+
 const NavbarLogged = () => {
+
   const navigate = useNavigate();
+  const { user, logout } = useAuth();
+
   const [notifications, setNotifications] = useState<Notificacion[]>([
     { message: "Alguien está interesado en tu donación.", date: "Hace 2 horas", read: false },
     { message: "Tu donación está próxima a caducar.", date: "Hace 5 horas", read: false },
@@ -94,11 +100,13 @@ const NavbarLogged = () => {
 
         {/* ✈️ MENSAJES */}
         <button
-          onClick={() => navigate("/chat")}
-          className="hover:scale-110 transition"
-        >
-          <Send className="text-[#826c43]" size={24} />
-        </button>
+  onClick={() => user && navigate(`/chat/${user.uid}?name=Yo`)}
+  className="hover:scale-110 transition"
+>
+  <Send className="text-[#826c43]" size={24} />
+</button>
+
+
 
         {/* ☰ MENÚ HAMBURGUESA */}
         <div className="relative" ref={menuRef}>
@@ -136,11 +144,12 @@ const NavbarLogged = () => {
               {/* Logout abajo completamente */}
               <div className="border-t border-[#e8dccb] mt-3 pt-3">
                 <button
-                  onClick={() => console.log("Cerrar sesión")}
-                  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-red-600 hover:bg-red-50 transition font-semibold"
-                >
-                  <LogOut size={20} /> Cerrar Sesión
-                </button>
+  onClick={logout}
+  className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-red-600 hover:bg-red-50 transition font-semibold"
+>
+  <LogOut size={20} /> Cerrar Sesión
+</button>
+
               </div>
 
             </div>

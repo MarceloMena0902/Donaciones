@@ -9,53 +9,12 @@ import {
 import L from "leaflet";
 import { MapPin, Crosshair, Utensils, Mail, Calendar } from "lucide-react";
 import Navbar from "../components/Navbar";
+import NavbarLogged from "../components/NavbarLogged";
+import { useAuth } from "../context/AuthContext";
 import "leaflet/dist/leaflet.css";
+import axios from "axios";
 
-// ⭐ MOCK de donaciones
-const mockDonations = [
-  {
-    id: 1,
-    latitud: -17.3895,
-    longitud: -66.1568,
-    donorNombre: "Juan Pérez",
-    donorEmail: "juan@mail.com",
-    tipoAlimento: "Perecedero",
-    alimento: "Arroz",
-    fechaCaducidad: "2025-12-15",
-    cantidad: 5,
-    unidadMedida: "kg",
-    descripcion: "Arroz en buen estado",
-    estado: "Disponible",
-  },
-  {
-    id: 2,
-    latitud: -17.38,
-    longitud: -66.14,
-    donorNombre: "Maria Lopez",
-    donorEmail: "maria@mail.com",
-    tipoAlimento: "No perecedero",
-    alimento: "Leche",
-    fechaCaducidad: "2026-01-02",
-    cantidad: 3,
-    unidadMedida: "L",
-    descripcion: "Leche entera",
-    estado: "Pendiente",
-  },
-  {
-    id: 3,
-    latitud: -17.383,
-    longitud: -66.155,
-    donorNombre: "Carlos Duran",
-    donorEmail: "carlos@mail.com",
-    tipoAlimento: "Preparado",
-    alimento: "Sopa de pollo",
-    fechaCaducidad: "2024-11-27",
-    cantidad: 2,
-    unidadMedida: "unidad",
-    descripcion: "Sopa recién preparada",
-    estado: "Disponible",
-  },
-];
+const API_URL = "http://localhost:4000/api/donations";
 
 const getMarkerColor = (estado: string) => {
   switch (estado) {
@@ -79,23 +38,42 @@ const CenterCochabamba = () => {
 };
 
 const MapaDonantes = () => {
+  const [donations, setDonations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // ⭐ FILTROS
   const [categoria, setCategoria] = useState("Todos");
-
-  const filtradas =
-    categoria === "Todos"
-      ? mockDonations
-      : mockDonations.filter((d) => d.tipoAlimento === categoria);
+  const { user } = useAuth();
 
   useEffect(() => {
-    setTimeout(() => setLoading(false), 700);
+    const load = async () => {
+      try {
+        const res = await axios.get(API_URL);
+        setDonations(res.data);
+      } catch (error) {
+        console.error("Error cargando donaciones:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    load();
   }, []);
+
+  // ⭐ FILTRO REAL
+  const filtradas =
+    categoria === "Todos"
+      ? donations
+      : donations.filter((d) => d.type === categoria);
+
+      const donacionesConUbicacion = filtradas.filter(
+  (d) =>
+    d.location &&
+    typeof d.location.lat === "number" &&
+    typeof d.location.lng === "number"
+);
 
   return (
     <div className="bg-[#f5efe7] min-h-screen w-full">
-      <Navbar />
+      {user ? <NavbarLogged /> : <Navbar />}
 
       <div className="pt-6 px-10">
 
@@ -115,7 +93,7 @@ const MapaDonantes = () => {
 
           <div className="mt-3 bg-[#fff8f0] px-8 py-4 rounded-2xl shadow flex w-fit items-center gap-4 border border-[#e4d7c5]">
             <span className="text-4xl font-bold text-[#e66748]">
-              {filtradas.length}
+              {donacionesConUbicacion.length}
             </span>
             <p className="text-gray-600 text-sm uppercase tracking-wide">
               Donaciones Encontradas
@@ -134,7 +112,7 @@ const MapaDonantes = () => {
             <Crosshair size={20} /> Centrar en Cochabamba
           </button>
 
-          {/* FILTROS POR CATEGORIA */}
+          {/* FILTROS */}
           <div className="flex items-center gap-3">
             <select
               value={categoria}
@@ -142,9 +120,9 @@ const MapaDonantes = () => {
               className="bg-[#fff8f0] border border-[#e4d7c5] px-4 py-3 rounded-xl shadow text-gray-700 font-medium"
             >
               <option value="Todos">Todas las categorías</option>
-              <option value="Perecedero">Perecederos</option>
-              <option value="No perecedero">No perecederos</option>
-              <option value="Preparado">Preparados</option>
+              <option value="Perecedero">Perecedero</option>
+              <option value="No perecedero">No perecedero</option>
+              <option value="Preparado">Preparado</option>
             </select>
           </div>
 
@@ -182,27 +160,28 @@ const MapaDonantes = () => {
 
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
-            {filtradas.map((d) => (
-              <Marker
-                key={d.id}
-                position={[d.latitud, d.longitud]}
-                icon={L.divIcon({
-                  html: `
-                    <div style="
-                      background:${getMarkerColor(d.estado)};
-                      width:32px;height:32px;
-                      border-radius:50%;
-                      border:3px solid white;
-                      display:flex;
-                      justify-content:center;
-                      align-items:center;
-                      box-shadow:0 3px 8px rgba(0,0,0,.25);
-                    ">
-                      <i class="fas fa-heart" style="color:white;font-size:14px;"></i>
-                    </div>
-                  `,
-                })}
-              >
+            {/* PINES REALES */}
+            {donacionesConUbicacion.map((d) => (
+  <Marker
+    key={d.id}
+    position={[d.location.lat, d.location.lng]}
+    icon={L.divIcon({
+      html: `
+        <div style="
+          background:${getMarkerColor(d.status)};
+          width:32px;height:32px;
+          border-radius:50%;
+          border:3px solid white;
+          display:flex;
+          justify-content:center;
+          align-items:center;
+          box-shadow:0 3px 8px rgba(0,0,0,.25);
+        ">
+          <i class="fas fa-heart" style="color:white;font-size:14px;"></i>
+        </div>
+      `,
+    })}
+  >
                 <Popup>
                   <div style={{
                     width: "260px",
@@ -213,8 +192,7 @@ const MapaDonantes = () => {
                     border: "1px solid #e4d7c5",
                     fontFamily: "Inter, sans-serif",
                   }}>
-                    
-                    {/* NOMBRE */}
+
                     <div style={{
                       background: "linear-gradient(to right, #826c43, #e66748)",
                       color: "white",
@@ -225,44 +203,35 @@ const MapaDonantes = () => {
                       fontWeight: "700",
                       fontSize: "17px",
                     }}>
-                      {d.donorNombre}
+                      {d.description}
                     </div>
 
-                    {/* FECHA CADUCIDAD */}
-                    <p style={{
-                      margin: "6px 0",
-                      color: "#4b3f2f",
-                      fontSize: "14px"
-                    }}>
+                    <p style={{ margin: "6px 0", color: "#4b3f2f", fontSize: "14px" }}>
                       <Calendar size={14} className="inline mr-1 text-[#826c43]" />
-                      <strong>Caduca:</strong> {d.fechaCaducidad}
+                      <strong>Caduca:</strong> {d.expirationDate || "No especificado"}
                     </p>
 
-                    {/* EMAIL */}
                     <p style={{ margin: "6px 0", color: "#4b3f2f", fontSize: "14px" }}>
                       <Mail size={14} className="inline mr-1 text-[#826c43]" />
-                      <strong>Email:</strong> {d.donorEmail}
+                      <strong>Email:</strong> {d.userId}
                     </p>
 
-                    {/* TIPO */}
                     <p style={{ margin: "6px 0", color: "#4b3f2f", fontSize: "14px" }}>
                       <Utensils size={14} className="inline mr-1 text-[#826c43]" />
-                      <strong>Tipo:</strong> {d.tipoAlimento}
+                      <strong>Tipo:</strong> {d.type}
                     </p>
 
-                    {/* CANTIDAD */}
                     <p style={{ margin: "6px 0", color: "#4b3f2f", fontSize: "14px" }}>
-                      <strong>Cantidad:</strong> {d.cantidad} {d.unidadMedida}
+                      <strong>Cantidad:</strong> {d.quantity} {d.unit}
                     </p>
 
-                    {/* ESTADO */}
                     <div style={{ marginTop: "10px" }}>
                       <span
                         style={{
                           background:
-                            d.estado === "Disponible"
+                            d.status === "Disponible"
                               ? "#22c55e"
-                              : d.estado === "Pendiente"
+                              : d.status === "Pendiente"
                               ? "#f97316"
                               : "#3b82f6",
                           color: "white",
@@ -272,21 +241,10 @@ const MapaDonantes = () => {
                           fontWeight: "600",
                         }}
                       >
-                        {d.estado}
+                        {d.status}
                       </span>
                     </div>
 
-                    {/* DESCRIPCION */}
-                    <p style={{
-                      marginTop: "8px",
-                      color: "#4b3f2f",
-                      fontSize: "14px",
-                      lineHeight: "1.3"
-                    }}>
-                      <strong>Descripción:</strong> {d.descripcion}
-                    </p>
-
-                    {/* BOTON */}
                     <a
                       href={`/donation/${d.id}`}
                       style={{
@@ -308,7 +266,6 @@ const MapaDonantes = () => {
                 </Popup>
               </Marker>
             ))}
-
           </MapContainer>
         </div>
       </div>

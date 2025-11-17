@@ -43,3 +43,66 @@
 .animate-fade-in {
   animation: fade-in 0.2s ease-out forwards;
 }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out;
+}
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.25s ease-out;
+}
+/* ----- MODAL ESTILO CUBA_PROJECT ----- */
+.swal-modal {
+  border-radius: 20px !important;
+  padding: 30px !important;
+  background: rgba(255, 255, 255, 0.85) !important;
+  backdrop-filter: blur(12px) !important;
+  border: 1px solid #dccdbb !important;
+  box-shadow: 0 8px 40px rgba(0,0,0,0.15) !important;
+}
+
+/* TÍTULO DEL MODAL */
+.swal-title {
+  font-size: 24px !important;
+  font-weight: 800 !important;
+  color: #121212 !important;
+}
+
+/* INPUTS PERSONALIZADOS */
+.custom-input {
+  border-radius: 12px !important;
+  border: 1px solid #dccdbb !important;
+  background: #faf6f1 !important;
+  height: 45px !important;
+  padding-left: 15px !important;
+}
+
+/* BOTÓN CONFIRMAR */
+.swal-confirm {
+  background: linear-gradient(to right, #826c43, #e66748) !important;
+  color: white !important;
+  padding: 10px 22px !important;
+  border-radius: 12px !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  margin: 10px 5px 0 5px !important;
+}
+
+/* BOTÓN CANCELAR */
+.swal-cancel {
+  background: #f2f2f2 !important;
+  color: #444 !important;
+  padding: 10px 22px !important;
+  border-radius: 12px !important;
+  font-size: 15px !important;
+  font-weight: 600 !important;
+  margin: 10px 5px 0 5px !important;
+}

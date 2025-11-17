@@ -1,6 +1,8 @@
 import { Heart, CheckCircle, Clock, Handshake, Plus, Eye, Edit, Trash2 } from "lucide-react";
 import NavbarLogged from "../components/NavbarLogged";
 import { Link } from "react-router-dom";
+import { useAuth } from "../context/AuthContext";
+
 
 const mockDonaciones = [
   {
@@ -22,6 +24,7 @@ const mockDonaciones = [
 ];
 
 const DonationDashboard = () => {
+  const { user } = useAuth();
   const donaciones = mockDonaciones;
 
   // Calculo de estadísticas
@@ -46,6 +49,7 @@ const DonationDashboard = () => {
               <h1 className="text-4xl font-extrabold text-gray-800 flex items-center gap-3">
                 <Heart className="text-[#826c43] w-10 h-10" />
                 Mis Donaciones
+                <h2 className="text-xl">Bienvenido, {user?.displayName}</h2>
               </h1>
 
               <p className="text-gray-600 mt-2 text-lg">

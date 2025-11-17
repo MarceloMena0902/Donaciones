@@ -1,20 +1,104 @@
-import { Mail, Lock, Phone, Home, User, Image, ChevronDown } from "lucide-react";
+import { Mail, Lock, Phone, Home, User, Image } from "lucide-react";
 import { useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import Swal from "sweetalert2";
+import {
+  registerWithEmail,
+  loginWithGoogle,
+  loginWithFacebook,
+} from "../services/authService";
+import { uploadImage } from "../services/cloudinaryService";
+
 
 const Register = () => {
-  const [preview, setPreview] = useState<string | null>(null);
+  const navigate = useNavigate();
 
+  // 🔹 Estados controlados
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [phone, setPhone] = useState("");
+  const [address, setAddress] = useState("");
+  const [photo, setPhoto] = useState<File | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // 🔹 Manejo de imagen local (solo previsualización)
   const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      setPhoto(file);
       const url = URL.createObjectURL(file);
       setPreview(url);
     }
   };
 
-  const handleSocial = (provider: string) => {
-    console.log("Login con:", provider);
+  // 🔹 Registro normal (correo + contraseña)
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (password !== confirmPassword) {
+      Swal.fire({
+        title: "Error",
+        text: "Las contraseñas no coinciden",
+        icon: "error",
+        confirmButtonColor: "#e66748",
+      });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      let photoUrl = "";
+  if (photo) photoUrl = await uploadImage(photo);
+
+
+      await registerWithEmail(name, email, password, phone, address, photoUrl);
+
+      Swal.fire({
+        title: "Cuenta creada 🎉",
+        text: "Tu registro fue exitoso",
+        icon: "success",
+        confirmButtonColor: "#826c43",
+      }).then(() => navigate("/login"));
+    } catch (error) {
+      console.error("❌ Error en registro:", error);
+      Swal.fire({
+        title: "Error",
+        text: "No se pudo completar el registro",
+        icon: "error",
+        confirmButtonColor: "#e66748",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // 🔹 Registro social (Google o Facebook)
+  const handleSocial = async (provider: "Google" | "Facebook") => {
+    setLoading(true);
+    try {
+      if (provider === "Google") await loginWithGoogle();
+      else await loginWithFacebook();
+
+      Swal.fire({
+        title: "Cuenta creada 🎉",
+        text: `Registro exitoso con ${provider}`,
+        icon: "success",
+        confirmButtonColor: "#826c43",
+      }).then(() => navigate("/dashboard"));
+    } catch (err) {
+      Swal.fire({
+        title: "Error",
+        text: `No se pudo registrar con ${provider}`,
+        icon: "error",
+        confirmButtonColor: "#e66748",
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -24,16 +108,9 @@ const Register = () => {
         background: "linear-gradient(135deg, #f5efe7, #efe7dc)",
       }}
     >
-      {/* CARD */}
       <div className="relative w-full max-w-2xl bg-white/70 backdrop-blur-xl rounded-3xl shadow-[0_8px_50px_rgba(0,0,0,0.18)] border border-white/60 p-10 overflow-hidden animate-fadeUp">
-
-        {/* Línea superior */}
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#826c43] to-[#e66748]" />
 
-        {/* Glow */}
-        <div className="absolute -top-10 -right-10 w-40 h-40 bg-gradient-to-br from-[#e66748]/30 to-[#826c43]/20 rounded-full blur-3xl animate-pulseSlow"></div>
-
-        {/* TÍTULO */}
         <h2 className="text-3xl font-extrabold text-[#121212] text-center mb-2">
           Crear Cuenta
         </h2>
@@ -42,11 +119,11 @@ const Register = () => {
           Únete a la comunidad de donantes 🤝
         </p>
 
-        {/* SOCIAL LOGIN */}
+        {/* 🔹 Social Login */}
         <div className="space-y-3 mb-8">
-          {/* Google */}
           <button
             onClick={() => handleSocial("Google")}
+            disabled={loading}
             className="w-full flex items-center justify-center gap-3 py-3 rounded-xl bg-white border border-[#dccdbb] shadow-sm hover:scale-[1.02] transition"
           >
             <img
@@ -58,9 +135,9 @@ const Register = () => {
             </span>
           </button>
 
-          {/* Facebook */}
           <button
             onClick={() => handleSocial("Facebook")}
+            disabled={loading}
             className="w-full flex items-center justify-center gap-3 py-3 rounded-xl bg-[#1877f2] text-white shadow-sm hover:scale-[1.02] transition"
           >
             <img
@@ -77,52 +154,86 @@ const Register = () => {
           <div className="h-px bg-[#d6c7b7] flex-1" />
         </div>
 
-        {/* FORM */}
-        <form className="space-y-6">
-
-          {/* Nombre */}
+        {/* 🔹 FORM */}
+        <form className="space-y-6" onSubmit={handleSubmit}>
           <Field label="Nombre Completo" icon={<User size={20} className="text-[#826c43]" />}>
-            <input type="text" placeholder="Tu nombre completo" className="input" />
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Tu nombre completo"
+              className="input"
+              required
+            />
           </Field>
 
-          {/* Correo */}
           <Field label="Correo Electrónico" icon={<Mail size={20} className="text-[#826c43]" />}>
-            <input type="email" placeholder="nombre@ejemplo.com" className="input" />
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="nombre@ejemplo.com"
+              className="input"
+              required
+            />
           </Field>
 
-          {/* Contraseña */}
           <Field label="Contraseña" icon={<Lock size={20} className="text-[#826c43]" />}>
-            <input type="password" placeholder="••••••••" className="input" />
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              className="input"
+              required
+            />
           </Field>
 
-          {/* Confirmar contraseña */}
           <Field label="Confirmar Contraseña" icon={<Lock size={20} className="text-[#826c43]" />}>
-            <input type="password" placeholder="Repite tu contraseña" className="input" />
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Repite tu contraseña"
+              className="input"
+              required
+            />
           </Field>
 
-          {/* Teléfono */}
           <Field label="Teléfono" icon={<Phone size={20} className="text-[#826c43]" />}>
-            <input type="text" placeholder="Ej: 76452345" className="input" />
+            <input
+              type="text"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder="Ej: 76452345"
+              className="input"
+            />
           </Field>
 
-          {/* Dirección */}
           <Field label="Dirección" icon={<Home size={20} className="text-[#826c43]" />}>
-            <input type="text" placeholder="Tu dirección" className="input" />
+            <input
+              type="text"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="Tu dirección"
+              className="input"
+            />
           </Field>
 
-          {/* Foto */}
           <div>
-            <label className="block text-gray-700 font-medium mb-1">Foto de Perfil</label>
+            <label className="block text-gray-700 font-medium mb-1">
+              Foto de Perfil
+            </label>
             <div className="flex items-center gap-3 bg-white border border-[#dccdbb] rounded-xl px-4 py-3 shadow-sm transition">
-
               <Image size={20} className="text-[#826c43]" />
-
               <input
-                type="file"
-                accept="image/*"
-                className="w-full text-gray-600"
-                onChange={handleImage}
-              />
+  id="photoInput"
+  name="file"
+  type="file"
+  accept="image/*"
+  onChange={handleImage}
+  className="block cursor-pointer"
+/>
             </div>
 
             {preview && (
@@ -135,16 +246,14 @@ const Register = () => {
             )}
           </div>
 
-          {/* Tipo de usuario */}
-          <Select label="Tipo de Usuario" options={["Donante", "Receptor"]} />
+          <button
+            type="submit"
+            disabled={loading}
+            className="submit-btn"
+          >
+            {loading ? "Registrando..." : "Crear Cuenta"}
+          </button>
 
-          {/* Rol */}
-          <Select label="Rol" options={["Usuario", "Donante", "Voluntario"]} />
-
-          {/* Submit */}
-          <button className="submit-btn">Crear Cuenta</button>
-
-          {/* Ir a LOGIN */}
           <p className="text-center mt-4 text-gray-600 text-sm">
             ¿Ya tienes una cuenta?{" "}
             <Link to="/login" className="text-[#e66748] font-semibold hover:underline">
@@ -159,35 +268,15 @@ const Register = () => {
 
 export default Register;
 
-/* -------------------------
-   SUB COMPONENTES
-------------------------- */
-
+// --------------------
+// Subcomponente Field
+// --------------------
 const Field = ({ label, icon, children }: any) => (
   <div>
     <label className="block text-gray-700 font-medium mb-1">{label}</label>
     <div className="flex items-center gap-3 bg-white border border-[#dccdbb] rounded-xl px-4 py-3 shadow-sm focus-within:border-[#e66748] transition-all">
       {icon}
       {children}
-    </div>
-  </div>
-);
-
-const Select = ({ label, options }: any) => (
-  <div>
-    <label className="block text-gray-700 font-medium mb-1">{label}</label>
-
-    <div className="relative">
-      <select className="appearance-none w-full bg-white border border-[#dccdbb] rounded-xl px-4 py-3 shadow-sm outline-none text-gray-700 focus:border-[#e66748] transition">
-        <option value="">Seleccione…</option>
-        {options.map((o: string) => (
-          <option value={o} key={o}>
-            {o}
-          </option>
-        ))}
-      </select>
-
-      <ChevronDown className="absolute right-4 top-3.5 text-gray-500" size={20} />
     </div>
   </div>
 );

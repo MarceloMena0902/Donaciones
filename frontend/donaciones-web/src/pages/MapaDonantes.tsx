@@ -7,36 +7,14 @@ import {
   useMap,
 } from "react-leaflet";
 import L from "leaflet";
-import { MapPin, Crosshair, Utensils, Mail } from "lucide-react";
-import Navbar from "../components/Navbar"; // ⭐ IMPORTA TU NAVBAR
+import { MapPin, Crosshair, Utensils, Mail, Calendar } from "lucide-react";
+import Navbar from "../components/Navbar";
+import NavbarLogged from "../components/NavbarLogged";
+import { useAuth } from "../context/AuthContext";
 import "leaflet/dist/leaflet.css";
+import axios from "axios";
 
-const mockDonations = [
-  {
-    id: 1,
-    latitud: -17.3895,
-    longitud: -66.1568,
-    donorNombre: "Juan Pérez",
-    donorEmail: "juan@mail.com",
-    tipoAlimento: "Arroz",
-    cantidad: 5,
-    unidadMedida: "kg",
-    descripcion: "Arroz en buen estado",
-    estado: "Disponible",
-  },
-  {
-    id: 2,
-    latitud: -17.38,
-    longitud: -66.14,
-    donorNombre: "Maria Lopez",
-    donorEmail: "maria@mail.com",
-    tipoAlimento: "Leche",
-    cantidad: 3,
-    unidadMedida: "L",
-    descripcion: "Leche entera",
-    estado: "Pendiente",
-  },
-];
+const API_URL = "http://localhost:4000/api/donations";
 
 const getMarkerColor = (estado: string) => {
   switch (estado) {
@@ -53,32 +31,59 @@ const getMarkerColor = (estado: string) => {
 
 const CenterCochabamba = () => {
   const map = useMap();
-
   useEffect(() => {
     map.setView([-17.3895, -66.1568], 12);
   }, []);
-
   return null;
 };
 
 const MapaDonantes = () => {
+  const [donations, setDonations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [categoria, setCategoria] = useState("Todos");
+  const { user } = useAuth();
 
   useEffect(() => {
-    setTimeout(() => setLoading(false), 700);
+    const load = async () => {
+      try {
+        const res = await axios.get(API_URL);
+        setDonations(res.data);
+      } catch (error) {
+        console.error("Error cargando donaciones:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    load();
   }, []);
+
+  // ⭐ FILTRO REAL
+  const filtradas =
+    categoria === "Todos"
+      ? donations
+      : donations.filter((d) => d.type === categoria);
+
+      const donacionesConUbicacion = filtradas.filter(
+  (d) =>
+    d.location &&
+    typeof d.location.lat === "number" &&
+    typeof d.location.lng === "number"
+);
 
   return (
     <div className="bg-[#f5efe7] min-h-screen w-full">
-      {/* ⭐ NAVBAR SIEMPRE ARRIBA */}
-      <Navbar />
+      {user ? <NavbarLogged /> : <Navbar />}
 
       <div className="pt-6 px-10">
+
         {/* HEADER */}
         <div className="bg-white p-10 rounded-3xl shadow-xl border border-[#e4d7c5] mb-10 relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#826c43] to-[#e66748]" />
+          <div className="absolute top-0 left-0 w-[92%] h-1 mx-auto 
+            bg-gradient-to-r from-[#826c43] to-[#e66748] rounded-t-3xl" />
 
-          <h1 className="text-5xl font-extrabold bg-gradient-to-r from-[#826c43] to-[#e66748] bg-clip-text text-transparent flex items-center gap-3">
+          <h1 className="text-5xl font-extrabold bg-gradient-to-r from-[#826c43] to-[#e66748] 
+            bg-clip-text text-transparent flex items-center gap-3">
             <MapPin size={45} /> Mapa de Donantes
           </h1>
 
@@ -88,16 +93,18 @@ const MapaDonantes = () => {
 
           <div className="mt-3 bg-[#fff8f0] px-8 py-4 rounded-2xl shadow flex w-fit items-center gap-4 border border-[#e4d7c5]">
             <span className="text-4xl font-bold text-[#e66748]">
-              {mockDonations.length}
+              {donacionesConUbicacion.length}
             </span>
             <p className="text-gray-600 text-sm uppercase tracking-wide">
-              Donaciones Disponibles
+              Donaciones Encontradas
             </p>
           </div>
         </div>
 
         {/* CONTROLES */}
-        <div className="bg-white rounded-2xl p-6 shadow-xl border border-[#e4d7c5] flex justify-between flex-wrap gap-4 mb-6">
+        <div className="bg-white rounded-2xl p-6 shadow-xl border border-[#e4d7c5] flex justify-between items-center flex-wrap gap-4 mb-6">
+
+          {/* Centrar */}
           <button
             className="flex items-center gap-2 bg-[#826c43] text-white px-5 py-3 rounded-xl shadow hover:bg-[#6d5938] transition-all hover:-translate-y-1"
             onClick={() => window.location.reload()}
@@ -105,6 +112,21 @@ const MapaDonantes = () => {
             <Crosshair size={20} /> Centrar en Cochabamba
           </button>
 
+          {/* FILTROS */}
+          <div className="flex items-center gap-3">
+            <select
+              value={categoria}
+              onChange={(e) => setCategoria(e.target.value)}
+              className="bg-[#fff8f0] border border-[#e4d7c5] px-4 py-3 rounded-xl shadow text-gray-700 font-medium"
+            >
+              <option value="Todos">Todas las categorías</option>
+              <option value="Perecedero">Perecedero</option>
+              <option value="No perecedero">No perecedero</option>
+              <option value="Preparado">Preparado</option>
+            </select>
+          </div>
+
+          {/* LEYENDA */}
           <div className="flex gap-8 text-gray-700 text-sm items-center">
             <span className="flex items-center gap-2">
               <MapPin size={16} className="text-green-600" /> Disponible
@@ -138,41 +160,112 @@ const MapaDonantes = () => {
 
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
-            {mockDonations.map((d) => (
-              <Marker
-                key={d.id}
-                position={[d.latitud, d.longitud]}
-                icon={L.divIcon({
-                  html: `
-                    <div style="
-                      background:${getMarkerColor(d.estado)};
-                      width:32px;height:32px;
-                      border-radius:50%;
-                      border:3px solid white;
-                      display:flex;
-                      justify-content:center;
-                      align-items:center;
-                      box-shadow:0 3px 8px rgba(0,0,0,.25);
-                    ">
-                      <i class="fas fa-heart" style="color:white;font-size:14px;"></i>
-                    </div>
-                  `,
-                })}
-              >
+            {/* PINES REALES */}
+            {donacionesConUbicacion.map((d) => (
+  <Marker
+    key={d.id}
+    position={[d.location.lat, d.location.lng]}
+    icon={L.divIcon({
+      html: `
+        <div style="
+          background:${getMarkerColor(d.status)};
+          width:32px;height:32px;
+          border-radius:50%;
+          border:3px solid white;
+          display:flex;
+          justify-content:center;
+          align-items:center;
+          box-shadow:0 3px 8px rgba(0,0,0,.25);
+        ">
+          <i class="fas fa-heart" style="color:white;font-size:14px;"></i>
+        </div>
+      `,
+    })}
+  >
                 <Popup>
-                  <div className="font-bold text-[#826c43] text-lg">{d.donorNombre}</div>
-                  <div className="text-sm">
-                    <Mail size={14} className="inline mr-1" /> {d.donorEmail}
+                  <div style={{
+                    width: "260px",
+                    background: "#fff8f0",
+                    borderRadius: "18px",
+                    padding: "14px",
+                    boxShadow: "0 4px 14px rgba(0,0,0,0.15)",
+                    border: "1px solid #e4d7c5",
+                    fontFamily: "Inter, sans-serif",
+                  }}>
+
+                    <div style={{
+                      background: "linear-gradient(to right, #826c43, #e66748)",
+                      color: "white",
+                      padding: "10px",
+                      borderRadius: "12px",
+                      marginBottom: "10px",
+                      textAlign: "center",
+                      fontWeight: "700",
+                      fontSize: "17px",
+                    }}>
+                      {d.description}
+                    </div>
+
+                    <p style={{ margin: "6px 0", color: "#4b3f2f", fontSize: "14px" }}>
+                      <Calendar size={14} className="inline mr-1 text-[#826c43]" />
+                      <strong>Caduca:</strong> {d.expirationDate || "No especificado"}
+                    </p>
+
+                    <p style={{ margin: "6px 0", color: "#4b3f2f", fontSize: "14px" }}>
+                      <Mail size={14} className="inline mr-1 text-[#826c43]" />
+                      <strong>Email:</strong> {d.userId}
+                    </p>
+
+                    <p style={{ margin: "6px 0", color: "#4b3f2f", fontSize: "14px" }}>
+                      <Utensils size={14} className="inline mr-1 text-[#826c43]" />
+                      <strong>Tipo:</strong> {d.type}
+                    </p>
+
+                    <p style={{ margin: "6px 0", color: "#4b3f2f", fontSize: "14px" }}>
+                      <strong>Cantidad:</strong> {d.quantity} {d.unit}
+                    </p>
+
+                    <div style={{ marginTop: "10px" }}>
+                      <span
+                        style={{
+                          background:
+                            d.status === "Disponible"
+                              ? "#22c55e"
+                              : d.status === "Pendiente"
+                              ? "#f97316"
+                              : "#3b82f6",
+                          color: "white",
+                          padding: "4px 10px",
+                          borderRadius: "20px",
+                          fontSize: "12px",
+                          fontWeight: "600",
+                        }}
+                      >
+                        {d.status}
+                      </span>
+                    </div>
+
+                    <a
+                      href={`/donation/${d.id}`}
+                      style={{
+                        display: "block",
+                        marginTop: "14px",
+                        background: "linear-gradient(to right,#826c43,#e66748)",
+                        padding: "10px",
+                        textAlign: "center",
+                        borderRadius: "10px",
+                        color: "white",
+                        fontWeight: "600",
+                        textDecoration: "none",
+                      }}
+                    >
+                      Ver Detalles
+                    </a>
+
                   </div>
-                  <div className="text-sm">
-                    <Utensils size={14} className="inline mr-1" /> {d.tipoAlimento}
-                  </div>
-                  <div className="text-sm">Cantidad: {d.cantidad} {d.unidadMedida}</div>
-                  <div className="text-sm">Estado: {d.estado}</div>
                 </Popup>
               </Marker>
             ))}
-
           </MapContainer>
         </div>
       </div>

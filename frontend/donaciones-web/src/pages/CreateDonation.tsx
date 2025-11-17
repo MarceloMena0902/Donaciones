@@ -1,4 +1,7 @@
 import { useState } from "react";
+import axios from "axios";
+import { useAuth } from "../context/AuthContext";
+
 import {
   CloudUpload,
   MapPin,
@@ -53,7 +56,22 @@ const CreateDonation = () => {
   });
 
   const [images, setImages] = useState<File[]>([]);
+  const API_URL = "http://localhost:4000/api/donations";
 
+  const { user } = useAuth();
+
+  // 🟢 EVITAR problemas: si user no está listo, mostrar loading
+  if (!user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-xl">
+        Cargando usuario...
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------
+  //    SELECCIONAR UBICACIÓN EN MAPA
+  // -------------------------------------------------------------
   const handleMapClick = (e: any) => {
     setForm({
       ...form,
@@ -69,14 +87,32 @@ const CreateDonation = () => {
     return null;
   };
 
+  // -------------------------------------------------------------
+  //   SUBIR IMÁGENES
+  // -------------------------------------------------------------
   const handleImageUpload = (files: FileList) => {
     const newFiles = [...images, ...Array.from(files)].slice(0, 5);
     setImages(newFiles);
   };
 
-  const submitDonation = (e: any) => {
+  // -------------------------------------------------------------
+  //         ENVIAR DONACIÓN
+  // -------------------------------------------------------------
+  const submitDonation = async (e: any) => {
     e.preventDefault();
 
+    // 1️⃣ Validar que usuario esté cargado
+    if (!user?.uid) {
+      Swal.fire({
+        icon: "error",
+        title: "Error de autenticación",
+        text: "Inicia sesión nuevamente para crear una donación.",
+        confirmButtonColor: "#e66748",
+      });
+      return;
+    }
+
+    // 2️⃣ Validar campos del formulario
     if (!form.tipo || !form.descripcion || !form.unidad || !form.lat || !form.lng) {
       Swal.fire({
         icon: "error",
@@ -87,44 +123,56 @@ const CreateDonation = () => {
       return;
     }
 
-    Swal.fire({
-      icon: "success",
-      title: "Donación Creada",
-      text: "Tu donación ha sido registrada correctamente 🎉",
-      confirmButtonColor: "#826c43",
-    }).then(() => {
-      window.location.href = "/dashboard";
-    });
+    try {
+      // 🔥 GUARDA userId REAL
+      const donationToSend = {
+        userId: user.uid,
+        type: form.tipo,
+        description: form.descripcion,
+        quantity: form.cantidad,
+        unit: form.unidad,
+        location: {
+          address: form.direccion,
+          lat: form.lat,
+          lng: form.lng,
+        },
+        expirationDate: form.fechaCaducidad || null,
+      };
+
+      console.log("🔥 Enviando donación a backend:", donationToSend);
+
+      const res = await axios.post(API_URL, donationToSend);
+
+      Swal.fire({
+        icon: "success",
+        title: "Donación creada",
+        text: "La donación ha sido registrada correctamente 🎉",
+        confirmButtonColor: "#826c43",
+      }).then(() => {
+        window.location.href = "/dashboard";
+      });
+    } catch (err: any) {
+      console.log("❌ Error al guardar:", err.response?.data || err);
+
+      Swal.fire({
+        icon: "error",
+        title: "Error al guardar",
+        text: err.response?.data?.error || "No se pudo registrar la donación",
+        confirmButtonColor: "#e66748",
+      });
+    }
   };
 
   return (
     <>
       <NavbarLogged />
 
-      <div className="min-h-screen w-full bg-[#f5efe7] px- pt-10 pb-10 animate-fadeIn relative overflow-hidden">
-
-        {/* ⭐ PARTÍCULAS SUAVES */}
-        <div className="absolute inset-0 pointer-events-none opacity-[0.15]">
-          {[...Array(25)].map((_, i) => (
-            <div
-              key={i}
-              className="absolute bg-[#826c43] rounded-full animate-float"
-              style={{
-                width: 4,
-                height: 4,
-                top: `${Math.random() * 100}%`,
-                left: `${Math.random() * 100}%`,
-                animationDelay: `${Math.random() * 5}s`,
-              }}
-            ></div>
-          ))}
-        </div>
+      <div className="min-h-screen w-full bg-[#f5efe7] pt-10 pb-10 relative overflow-hidden">
 
         {/* HEADER */}
         <div className="max-w-5xl mx-auto mb-10">
           <div className="bg-white rounded-2xl shadow-lg p-8 border border-[#e5dacb] relative">
 
-            {/* Línea decorativa */}
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#826c43] to-[#e66748]" />
 
             <h1 className="text-4xl font-extrabold text-gray-800 flex items-center gap-3">
@@ -138,7 +186,7 @@ const CreateDonation = () => {
           </div>
         </div>
 
-        {/* FORM */}
+        {/* FORMULARIO */}
         <form
           onSubmit={submitDonation}
           className="max-w-5xl mx-auto bg-white rounded-2xl shadow-xl p-10 border border-[#e5dacb]"
@@ -262,7 +310,10 @@ const CreateDonation = () => {
               >
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                 <LocationSelector />
-                {form.lat && form.lng && <Marker position={[form.lat, form.lng]} />}
+
+                {form.lat && form.lng && (
+                  <Marker position={[form.lat, form.lng]} />
+                )}
               </MapContainer>
             </div>
 
@@ -279,9 +330,7 @@ const CreateDonation = () => {
 
             <div
               className="border-2 border-dashed border-[#826c43] rounded-xl p-10 text-center cursor-pointer hover:bg-[#f0e8dd] transition"
-              onClick={() =>
-                document.getElementById("imageInput")?.click()
-              }
+              onClick={() => document.getElementById("imageInput")?.click()}
             >
               <CloudUpload size={55} className="mx-auto text-[#826c43] mb-3" />
               <p className="font-semibold text-gray-700">Arrastra las imágenes aquí</p>
@@ -324,7 +373,6 @@ const CreateDonation = () => {
 
           {/* ACCIONES */}
           <div className="flex flex-col md:flex-row gap-4 justify-center mt-10">
-
             <button
               type="submit"
               className="flex items-center justify-center gap-2 
@@ -342,8 +390,8 @@ const CreateDonation = () => {
             >
               <ArrowLeft size={18} /> Cancelar
             </button>
-
           </div>
+
         </form>
       </div>
     </>

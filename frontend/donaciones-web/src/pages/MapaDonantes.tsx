@@ -13,6 +13,7 @@ import NavbarLogged from "../components/NavbarLogged";
 import { useAuth } from "../context/AuthContext";
 import "leaflet/dist/leaflet.css";
 import axios from "axios";
+import { Link } from "react-router-dom";
 
 const API_URL = "http://localhost:4000/api/donations";
 
@@ -43,13 +44,56 @@ const MapaDonantes = () => {
   const [categoria, setCategoria] = useState("Todos");
   const { user } = useAuth();
 
+  // ⭐ Donaciones estáticas para pruebas
+  const staticDonations = [
+    {
+      id: "STATIC1",
+      description: "Caja de manzanas verdes frescas 🍏",
+      expirationDate: "2025-02-10",
+      type: "Perecedero",
+      quantity: 8,
+      unit: "kg",
+      status: "Disponible",
+      userId: "donante1@test.com",
+      location: {
+        lat: -17.3801,
+        lng: -66.1634,
+        address: "Zona Recoleta, Cochabamba"
+      }
+    },
+    {
+      id: "STATIC2",
+      description: "Paquetes de fideos surtidos 🍝",
+      expirationDate: "2025-05-22",
+      type: "No perecedero",
+      quantity: 12,
+      unit: "unidad",
+      status: "Pendiente",
+      userId: "donante2@test.com",
+      location: {
+        lat: -17.3959,
+        lng: -66.1452,
+        address: "Av Ayacucho, Cercado"
+      }
+    }
+  ];
+
   useEffect(() => {
     const load = async () => {
       try {
         const res = await axios.get(API_URL);
-        setDonations(res.data);
+
+        const backendDonations = Array.isArray(res.data) ? res.data : [];
+
+        // ⭐ UNIR DONACIONES DEL BACKEND + ESTÁTICAS
+        const finalData = [...backendDonations, ...staticDonations];
+
+        setDonations(finalData);
       } catch (error) {
         console.error("Error cargando donaciones:", error);
+
+        // si falla el backend, usar solo las estáticas
+        setDonations(staticDonations);
       } finally {
         setLoading(false);
       }
@@ -64,12 +108,12 @@ const MapaDonantes = () => {
       ? donations
       : donations.filter((d) => d.type === categoria);
 
-      const donacionesConUbicacion = filtradas.filter(
-  (d) =>
-    d.location &&
-    typeof d.location.lat === "number" &&
-    typeof d.location.lng === "number"
-);
+  const donacionesConUbicacion = filtradas.filter(
+    (d) =>
+      d.location &&
+      typeof d.location.lat === "number" &&
+      typeof d.location.lng === "number"
+  );
 
   return (
     <div className="bg-[#f5efe7] min-h-screen w-full">
@@ -160,28 +204,28 @@ const MapaDonantes = () => {
 
             <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
 
-            {/* PINES REALES */}
+            {/* PINES REALES Y ESTÁTICOS */}
             {donacionesConUbicacion.map((d) => (
-  <Marker
-    key={d.id}
-    position={[d.location.lat, d.location.lng]}
-    icon={L.divIcon({
-      html: `
-        <div style="
-          background:${getMarkerColor(d.status)};
-          width:32px;height:32px;
-          border-radius:50%;
-          border:3px solid white;
-          display:flex;
-          justify-content:center;
-          align-items:center;
-          box-shadow:0 3px 8px rgba(0,0,0,.25);
-        ">
-          <i class="fas fa-heart" style="color:white;font-size:14px;"></i>
-        </div>
-      `,
-    })}
-  >
+              <Marker
+                key={d.id}
+                position={[d.location.lat, d.location.lng]}
+                icon={L.divIcon({
+                  html: `
+                    <div style="
+                      background:${getMarkerColor(d.status)};
+                      width:32px;height:32px;
+                      border-radius:50%;
+                      border:3px solid white;
+                      display:flex;
+                      justify-content:center;
+                      align-items:center;
+                      box-shadow:0 3px 8px rgba(0,0,0,.25);
+                    ">
+                      <i class="fas fa-heart" style="color:white;font-size:14px;"></i>
+                    </div>
+                  `,
+                })}
+              >
                 <Popup>
                   <div style={{
                     width: "260px",
@@ -209,11 +253,6 @@ const MapaDonantes = () => {
                     <p style={{ margin: "6px 0", color: "#4b3f2f", fontSize: "14px" }}>
                       <Calendar size={14} className="inline mr-1 text-[#826c43]" />
                       <strong>Caduca:</strong> {d.expirationDate || "No especificado"}
-                    </p>
-
-                    <p style={{ margin: "6px 0", color: "#4b3f2f", fontSize: "14px" }}>
-                      <Mail size={14} className="inline mr-1 text-[#826c43]" />
-                      <strong>Email:</strong> {d.userId}
                     </p>
 
                     <p style={{ margin: "6px 0", color: "#4b3f2f", fontSize: "14px" }}>
@@ -245,22 +284,22 @@ const MapaDonantes = () => {
                       </span>
                     </div>
 
-                    <a
-                      href={`/donation/${d.id}`}
-                      style={{
-                        display: "block",
-                        marginTop: "14px",
-                        background: "linear-gradient(to right,#826c43,#e66748)",
-                        padding: "10px",
-                        textAlign: "center",
-                        borderRadius: "10px",
-                        color: "white",
-                        fontWeight: "600",
-                        textDecoration: "none",
-                      }}
-                    >
-                      Ver Detalles
-                    </a>
+<Link
+  to={`/donation/${d.id}`}
+  style={{
+    display: "block",
+    marginTop: "14px",
+    background: "linear-gradient(to right,#826c43,#e66748)",
+    padding: "10px",
+    textAlign: "center",
+    borderRadius: "10px",
+    color: "white",
+    fontWeight: "600",
+    textDecoration: "none",
+  }}
+>
+  Ver Detalles
+</Link>
 
                   </div>
                 </Popup>

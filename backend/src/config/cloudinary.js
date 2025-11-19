@@ -8,3 +8,8 @@ cloudinary.config({
 });
 
 export default cloudinary;
+export const uploadImage = (filePath) => {
+  return cloudinary.uploader.upload(filePath, {
+    folder: "donaciones",
+  });
+};

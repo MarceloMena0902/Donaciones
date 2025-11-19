@@ -1,22 +1,50 @@
 // src/pages/DeleteDonation.tsx
 import NavbarLogged from "../components/NavbarLogged";
 import { useNavigate, useParams, Link } from "react-router-dom";
-import { AlertTriangle, Trash2, Utensils, Weight, Info, ArrowLeft } from "lucide-react";
+import {
+  AlertTriangle,
+  Trash2,
+  Utensils,
+  Weight,
+  Info,
+  ArrowLeft,
+} from "lucide-react";
 import Swal from "sweetalert2";
+import { useEffect, useState } from "react";
+import axios from "axios";
 
 const DeleteDonation = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  // Mock de la donación a eliminar
-  const donation = {
-    id: 1,
-    tipoAlimento: "Manzanas rojas frescas",
-    descripcion: "Caja de manzanas rojas en excelente estado.",
-    cantidad: 5,
-    unidadMedida: "kg",
-  };
+  const [donation, setDonation] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
 
+  // ============================================================
+  // 1️⃣ Cargar donación desde backend
+  // ============================================================
+  useEffect(() => {
+    if (!id) return;
+
+    const load = async () => {
+      try {
+        const res = await axios.get(`http://localhost:4000/api/donations/${id}`);
+        setDonation(res.data);
+      } catch (err) {
+        console.log("❌ Error al cargar donación:", err);
+        Swal.fire("Error", "No se pudo cargar la donación.", "error");
+        navigate("/dashboard");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    load();
+  }, [id]);
+
+  // ============================================================
+  // 2️⃣ Confirmar eliminación
+  // ============================================================
   const handleDelete = () => {
     Swal.fire({
       icon: "warning",
@@ -27,20 +55,45 @@ const DeleteDonation = () => {
       cancelButtonText: "Cancelar",
       confirmButtonColor: "#e66748",
       cancelButtonColor: "#826c43",
-    }).then((result) => {
-      if (result.isConfirmed) {
+    }).then(async (result) => {
+      if (!result.isConfirmed) return;
+
+      try {
+        await axios.delete(`http://localhost:4000/api/donations/${id}`);
+
         Swal.fire({
           icon: "success",
           title: "Donación eliminada",
           text: "La donación fue eliminada correctamente.",
           confirmButtonColor: "#826c43",
-        }).then(() => {
-          navigate("/dashboard");
-        });
+        }).then(() => navigate("/dashboard"));
+      } catch (err) {
+        console.log("❌ Error al eliminar:", err);
+        Swal.fire("Error", "No se pudo eliminar la donación.", "error");
       }
     });
   };
 
+  // ============================================================
+  // 3️⃣ Loading
+  // ============================================================
+  if (loading)
+    return (
+      <div className="min-h-screen flex items-center justify-center text-xl">
+        Cargando información...
+      </div>
+    );
+
+  if (!donation)
+    return (
+      <div className="min-h-screen flex items-center justify-center text-xl">
+        Donación no encontrada ❌
+      </div>
+    );
+
+  // ============================================================
+  // 4️⃣ UI
+  // ============================================================
   return (
     <>
       <NavbarLogged />
@@ -78,7 +131,7 @@ const DeleteDonation = () => {
               </p>
             </div>
 
-            {/* Detalles donación */}
+            {/* Información de la donación */}
             <div className="bg-[#faf6f1] border border-[#e5dacb] rounded-xl p-5 mb-8">
               <h2 className="text-lg font-semibold text-gray-800 mb-4 text-center">
                 Detalles de la Donación
@@ -87,18 +140,20 @@ const DeleteDonation = () => {
               <div className="space-y-4">
                 <DetailRow
                   icon={<Utensils />}
-                  label="Tipo de alimento"
-                  value={donation.tipoAlimento}
+                  label="Tipo"
+                  value={donation.type}
                 />
+
                 <DetailRow
                   icon={<Weight />}
                   label="Cantidad"
-                  value={`${donation.cantidad} ${donation.unidadMedida}`}
+                  value={`${donation.quantity} ${donation.unit}`}
                 />
+
                 <DetailRow
                   icon={<Info />}
                   label="Descripción"
-                  value={donation.descripcion}
+                  value={donation.description}
                 />
               </div>
             </div>
@@ -129,6 +184,10 @@ const DeleteDonation = () => {
 };
 
 export default DeleteDonation;
+
+// ============================================================
+// COMPONENTE AUXILIAR PARA FILAS DE DETALLES
+// ============================================================
 
 const DetailRow = ({
   icon,

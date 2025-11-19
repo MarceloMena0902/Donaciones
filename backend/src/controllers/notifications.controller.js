@@ -3,7 +3,7 @@ import { db } from "../config/firebase.js";
 // ✅ Crear notificación
 export const sendNotification = async (req, res) => {
   try {
-    const { userId, content, donationId } = req.body;
+    const { userId, content, donationId, requesterId, preview, type } = req.body;
 
     if (!userId || !content) {
       return res.status(400).json({ error: "userId y content son obligatorios." });
@@ -13,9 +13,13 @@ export const sendNotification = async (req, res) => {
       userId,
       content,
       donationId: donationId || null,
+      requesterId: requesterId || null,
+      preview: preview || null,
+      type: type || "info",
       read: false,
       createdAt: new Date(),
     });
+
 
     res.status(201).json({ id: notifRef.id, message: "Notificación enviada correctamente." });
   } catch (error) {
@@ -33,10 +37,12 @@ export const getNotifications = async (req, res) => {
       .orderBy("createdAt", "desc")
       .get();
 
-    const notifications = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
+        const notifications = snapshot.docs
+      .map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      }))
+      .filter(n => n.content);
 
     res.status(200).json(notifications);
   } catch (error) {
@@ -48,12 +54,14 @@ export const getNotifications = async (req, res) => {
 export const markAsRead = async (req, res) => {
   try {
     const { id } = req.params;
-    const notifRef = db.collection("notifications").doc(id);
 
-    await notifRef.update({ read: true });
+    await db.collection("notifications").doc(id).update({
+      read: true
+    });
 
-    res.status(200).json({ message: "Notificación marcada como leída." });
+    res.json({ ok: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
+

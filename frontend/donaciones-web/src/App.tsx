@@ -17,7 +17,7 @@ import DeleteDonation from "./pages/DeleteDonation";
 import DonationView from "./pages/DonationView ";
 import ChatWindow from "./pages/ChatWindow";
 import ProfileView from "./pages/ProfileView";
-
+import ChatList from "./pages/ChatList";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 function App() {
@@ -30,7 +30,7 @@ function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
-
+      <Route path="/chats" element={<ChatList />} />
       {/* ----------- PRIVADO (AUTH REQUIRED) ----------- */}
       <Route
         path="/dashboard"
@@ -40,6 +40,7 @@ function App() {
           </ProtectedRoute>
         }
       />
+  <Route path="/chat/:chatId" element={<ChatWindow />} />
 
       <Route
         path="/crear-donacion"

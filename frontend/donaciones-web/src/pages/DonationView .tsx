@@ -11,6 +11,9 @@ import {
 import NavbarLogged from "../components/NavbarLogged";
 import axios from "axios";
 import { useEffect, useState } from "react";
+import { useAuth } from "../context/AuthContext";
+import Swal from "sweetalert2";
+
 
 const API_URL = "http://localhost:4000/api/donations";
 const USERS_API = "http://localhost:4000/api/users";
@@ -18,11 +21,11 @@ const USERS_API = "http://localhost:4000/api/users";
 const DonationView = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-
+  const { user } = useAuth();
   const [donation, setDonation] = useState<any | null>(null);
   const [donorData, setDonorData] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
-
+  const [donaciones, setDonaciones] = useState<any[]>([]);
   // ⭐ MODALES
   const [showPreChat, setShowPreChat] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -88,41 +91,39 @@ const DonationView = () => {
     };
     load();
   }, [id]);
+  
 
   // =========================
   // 2. Cargar usuario (o datos fake)
   // =========================
   useEffect(() => {
-    if (!donation?.userId) return;
+  if (!donation?.userId) return;
 
-    const loadUser = async () => {
-      try {
-        const res = await axios.get(`${USERS_API}/${donation.userId}`);
-        setDonorData(res.data);
-      } catch {
-        setDonorData({
-          id: donation.userId,
-          name: "Usuario de prueba",
-          email: donation.userId,
-          phone: "70000000",
-        });
-      }
-    };
+  const loadUser = async () => {
+    try {
+      const res = await axios.get(`${USERS_API}/${donation.userId}`);
+      setDonorData(res.data);
+    } catch {
+      // fallback si el donante no existe en backend
+      setDonorData({
+        id: donation.userId,
+        name: "Donante",
+        email: donation.userId,
+        phone: "Sin número",
+      });
+    }
+  };
 
-    loadUser();
-  }, [donation]);
+  loadUser();
+}, [donation]);
+
+ 
 
   // =========================
   // SOLO FRONTEND — no manda nada al backend
   // =========================
-  const handleSendPreMessage = () => {
-    if (!selectedMessage) return;
+ 
 
-    console.log("Mensaje enviado (FRONTEND): ", selectedMessage);
-
-    setShowPreChat(false);
-    setShowSuccessModal(true);
-  };
 
   if (loading)
     return (
@@ -141,6 +142,51 @@ const DonationView = () => {
   const donorName = donorData?.name || "Donante";
   const donorEmail = donorData?.email || "No especificado";
   const donorPhone = donorData?.phone || "No especificado";
+const sendRequestToBackend = async () => {
+  if (!selectedMessage || !donation || !donorData) return;
+
+  if (!user) {
+    navigate("/login");
+    return;
+  }
+
+  try {
+    // 1️⃣ Guardar solicitud
+    await axios.post("http://localhost:4000/api/requests", {
+      donationId: donation.id,
+      donorId: donation.userId,
+      requesterId: user.uid,
+      message: selectedMessage
+    });
+
+    // 2️⃣ Guardar mensaje
+    const chatId = `${user.uid}_${donation.userId}_${donation.id}`;
+    await axios.post("http://localhost:4000/api/messages", {
+      chatId,
+      senderId: user.uid,
+      receiverId: donation.userId,
+      content: selectedMessage
+    });
+    await axios.post("http://localhost:4000/api/notifications", {
+  userId: donation.userId,          // a quién se notifica
+  type: "solicitud",                // ✔ necesario para abrir modal
+  requesterId: user.uid,            // quién envió la solicitud
+  donationId: donation.id,          // qué donación
+  preview: selectedMessage,         // ✔ mensaje REAL que envió
+  content: `${user.displayName || "Un usuario"} quiere contactar sobre tu donación`,
+});
+
+
+
+
+    setShowPreChat(false);
+    setShowSuccessModal(true);
+
+  } catch (error) {
+    console.error("❌ Error enviando solicitud:", error);
+  }
+};
+
 
   return (
     <div className="min-h-screen bg-[#f7f2eb]">
@@ -199,17 +245,15 @@ const DonationView = () => {
 
       {/* ⭐ AHORA este botón recién envía */}
       <button
-        onClick={() => {
-          if (!selectedMessage) return;
-          setShowPreChat(false);
-          setShowSuccessModal(true);
-        }}
+        onClick={sendRequestToBackend}
         disabled={!selectedMessage}
         className="w-full mt-5 px-6 py-3 rounded-xl bg-gradient-to-r from-[#826c43] to-[#e66748] 
           text-white shadow hover:scale-[1.03] transition font-semibold disabled:opacity-50"
       >
         Enviar mensaje
       </button>
+
+
     </div>
   </div>
 )}
@@ -247,7 +291,7 @@ const DonationView = () => {
         </h1>
 
         <p className="text-gray-600 mb-12">
-          Información completa del donante y del alimento donado.
+          Información completa del donante y del producto donado.
         </p>
 
         <div className="bg-white/90 rounded-3xl shadow-xl border border-[#e5d8c6] p-10 relative overflow-hidden">
@@ -331,14 +375,17 @@ const DonationView = () => {
 
           {/* BOTONES */}
           <div className="mt-12 flex gap-4">
-            <button
-              onClick={() => setShowPreChat(true)}
-              className="bg-gradient-to-r from-[#826c43] to-[#e66748] 
-                text-white px-6 py-3 rounded-xl shadow hover:scale-105 transition flex items-center gap-2"
-            >
-              <i className="fas fa-comments"></i>
-              Contactar al Donante
-            </button>
+            {donation.userId !== user?.uid && (
+              <button
+                onClick={() => setShowPreChat(true)}
+                className="bg-gradient-to-r from-[#826c43] to-[#e66748] 
+                  text-white px-6 py-3 rounded-xl shadow hover:scale-105 transition flex items-center gap-2"
+              >
+                <i className="fas fa-comments"></i>
+                Contactar al Donante
+              </button>
+            )}
+
 
             <button
               onClick={() => navigate(-1)}

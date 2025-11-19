@@ -17,10 +17,11 @@ import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import Swal from "sweetalert2";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import axios from "axios";
 
-// Fix Leaflet marker
+// Fix Leaflet
 const DefaultIcon = L.icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
   shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
@@ -36,178 +37,259 @@ type DonationForm = {
   direccion: string;
   lat: number | null;
   lng: number | null;
-  estado: string; // NUEVO ✔
+  estado: string;
 };
 
 const unidades = ["kg", "L", "unidad", "caja"];
-
-// Mock inicial DONACIÓN YA EXISTENTE
-// Mock inicial DONACIÓN YA EXISTENTE
-const initialDonation: DonationForm = {
-  tipo: "Perecedero",
-  fechaCaducidad: "2025-12-15",
-  descripcion:
-    "Caja de manzanas rojas en excelente estado, ideales para repartir hoy.",
-  cantidad: 5,
-  unidad: "kg",
-  direccion: "Av. Heroínas 123, Cochabamba",
-  lat: -17.3895,
-  lng: -66.1568,
-
-  // ✔ ESTADO POR DEFECTO
-  estado: "Disponible",
-};
+const today = new Date().toISOString().split("T")[0];
 
 const EditDonation = () => {
   const { id } = useParams();
   const navigate = useNavigate();
 
-  const [form, setForm] = useState<DonationForm>(initialDonation);
-  const [images, setImages] = useState<File[]>([]);
+  const [form, setForm] = useState<DonationForm | null>(null);
 
+  const [existingImages, setExistingImages] = useState<string[]>([]);
+  const [newImages, setNewImages] = useState<File[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // ============================================================
+  // 1) Cargar la donación existente
+  // ============================================================
+  useEffect(() => {
+    const loadDonation = async () => {
+      try {
+        const res = await axios.get(`http://localhost:4000/api/donations/${id}`);
+        const data = res.data;
+
+        // reverse geocoding
+        let address = data.location?.address || "";
+        if (data.location?.lat && data.location?.lng) {
+          const geo = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${data.location.lat}&lon=${data.location.lng}`
+          );
+          const geoJson = await geo.json();
+          address = geoJson.display_name || address;
+        }
+
+        setForm({
+          tipo: data.type,
+          fechaCaducidad: data.expirationDate || "",
+          descripcion: data.description,
+          cantidad: data.quantity,
+          unidad: data.unit,
+          direccion: address,
+          lat: data.location?.lat || null,
+          lng: data.location?.lng || null,
+          estado: data.status || "Disponible",
+        });
+
+        setExistingImages(data.images || []);
+      } catch (err) {
+        console.log("❌ Error al cargar donación:", err);
+        Swal.fire("Error", "No se pudo cargar la donación.", "error");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadDonation();
+  }, [id]);
+
+  // ============================================================
+  // 2) Mapa → actualizar ubicación + dirección
+  // ============================================================
   const LocationSelector = () => {
     useMapEvents({
-      click: (e) => {
-        setForm((prev) => ({ ...prev, lat: e.latlng.lat, lng: e.latlng.lng }));
+      click: async (e) => {
+        const lat = e.latlng.lat;
+        const lng = e.latlng.lng;
+
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+          );
+          const data = await res.json();
+          const address = data.display_name || "Dirección desconocida";
+
+          setForm((prev) =>
+            prev ? { ...prev, lat, lng, direccion: address } : prev
+          );
+        } catch (err) {
+          console.log("Error reverse geocoding:", err);
+        }
       },
     });
+
     return null;
   };
 
+  // ============================================================
+  // 3) Manejar selección de nuevas imágenes
+  // ============================================================
   const handleImageUpload = (files: FileList) => {
-    const newFiles = Array.from(files).slice(0, 5);
-    setImages(newFiles);
+    const selected = Array.from(files);
+
+    const totalActual = existingImages.length + newImages.length;
+    const espaciosDisponibles = 5 - totalActual;
+
+    if (espaciosDisponibles <= 0) return;
+
+    const toAdd = selected.slice(0, espaciosDisponibles);
+    setNewImages((prev) => [...prev, ...toAdd]);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  // ============================================================
+  // 4) Subir nuevas imágenes a tu backend → Cloudinary
+  // ============================================================
+  const uploadNewImages = async (): Promise<string[]> => {
+    const urls: string[] = [];
 
-    if (
-      !form.tipo ||
-      !form.descripcion ||
-      !form.unidad ||
-      !form.lat ||
-      !form.lng
-    ) {
-      Swal.fire({
-        icon: "error",
-        title: "Campos incompletos",
-        text: "Por favor completa toda la información requerida.",
-        confirmButtonColor: "#e66748",
-      });
-      return;
+    for (const img of newImages) {
+      const formData = new FormData();
+      formData.append("image", img);
+
+      const res = await axios.post(
+        "http://localhost:4000/api/donations/upload-image",
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+
+      urls.push(res.data.url);
     }
 
-    Swal.fire({
-      icon: "success",
-      title: "Donación actualizada",
-      text: "La donación ha sido modificada correctamente 🎉",
-      confirmButtonColor: "#826c43",
-    }).then(() => {
-      navigate("/dashboard");
-    });
+    return urls;
   };
 
+  // ============================================================
+  // 5) Guardar cambios (UPDATE DONATION)
+  // ============================================================
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form) return;
+
+    try {
+      // 🔥 Subir nuevas imágenes a Cloudinary
+      const uploaded = await uploadNewImages();
+
+      // 🔥 Crear lista final de imágenes
+      const finalImages = [...existingImages, ...uploaded];
+
+      // 🔥 UPDATE DONATION
+      await axios.put(`http://localhost:4000/api/donations/${id}`, {
+        type: form.tipo,
+        description: form.descripcion,
+        quantity: form.cantidad,
+        unit: form.unidad,
+        expirationDate: form.fechaCaducidad,
+        status: form.estado,
+        location: {
+          lat: form.lat,
+          lng: form.lng,
+          address: form.direccion,
+        },
+        images: finalImages,
+      });
+
+      Swal.fire("Éxito", "Donación actualizada correctamente", "success");
+      navigate("/dashboard");
+
+    } catch (err) {
+      console.log(err);
+      Swal.fire("Error", "No se pudo actualizar la donación.", "error");
+    }
+  };
+
+  // ============================================================
+  // LOADING
+  // ============================================================
+  if (loading || !form)
+    return (
+      <div className="min-h-screen flex items-center justify-center text-xl">
+        Cargando información...
+      </div>
+    );
+
+  // ============================================================
+  // UI
+  // ============================================================
   return (
     <>
       <NavbarLogged />
 
-      <div className="min-h-screen w-full bg-[#f5efe7] px-6 py-10 pt-24 animate-fadeIn relative overflow-hidden">
-        {/* Partículas */}
-        <div className="absolute inset-0 pointer-events-none opacity-[0.2]">
-          {[...Array(25)].map((_, i) => (
-            <div
-              key={i}
-              className="absolute bg-[#826c43] rounded-full animate-float"
-              style={{
-                width: 4,
-                height: 4,
-                top: `${Math.random() * 100}%`,
-                left: `${Math.random() * 100}%`,
-                animationDelay: `${Math.random() * 5}s`,
-              }}
-            />
-          ))}
-        </div>
+      <div className="min-h-screen w-full bg-[#f5efe7] px-6 py-10 pt-24">
+        <div className="max-w-5xl mx-auto">
 
-        <div className="max-w-5xl mx-auto relative z-10">
-          {/* HEADER */}
-          <div className="bg-white rounded-2xl shadow-lg p-8 border border-[#e5dacb] mb-8 relative overflow-hidden">
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#826c43] to-[#e66748]" />
-            <h1 className="text-3xl md:text-4xl font-extrabold text-gray-800 flex items-center gap-3">
-              <Heart className="text-[#826c43]" />
-              Editar Donación
+          {/* ------------ HEADER --------------- */}
+          <div className="bg-white rounded-2xl shadow-lg p-8 border border-[#e5dacb] mb-8">
+            <h1 className="text-3xl font-extrabold flex items-center gap-3">
+              <Heart className="text-[#826c43]" /> Editar Donación
             </h1>
-            <p className="text-gray-600 mt-2">
-              Actualiza la información de tu donación existente.
-            </p>
           </div>
 
-          {/* FORM */}
-          <form
-            onSubmit={handleSubmit}
-            className="bg-white rounded-2xl shadow-xl p-8 border border-[#e5dacb]"
-          >
-            {/* INFO BÁSICA */}
-            <section className="mb-8 bg-[#faf6f1] border border-[#e5dacb] rounded-xl p-6">
-              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2 mb-5">
+          {/* ------------ FORMULARIO --------------- */}
+          <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-xl p-8 border">
+
+            {/* ---------- INFO BÁSICA ---------- */}
+            <section className="mb-8 bg-[#faf6f1] p-6 rounded-xl border">
+              <h2 className="text-xl font-bold mb-5 flex items-center gap-2">
                 <Info className="text-[#826c43]" /> Información Básica
               </h2>
 
+              {/* Tipo y fecha */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Tipo */}
                 <div>
-                  <label className="font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                  <label className="font-semibold mb-2 flex items-center gap-2">
                     <Apple size={18} /> Tipo de alimento
                   </label>
                   <select
                     value={form.tipo}
                     onChange={(e) => setForm({ ...form, tipo: e.target.value })}
-                    className="w-full bg-white border border-[#dccdbb] rounded-xl px-4 py-3 shadow-sm"
+                    className="w-full border rounded-xl px-4 py-3"
                   >
                     <option value="">Seleccione...</option>
-                    <option value="Perecedero">🥬 Perecedero</option>
-                    <option value="No perecedero">🥫 No perecedero</option>
-                    <option value="Preparado">🍲 Preparado</option>
+                    <option value="Perecedero">Perecedero</option>
+                    <option value="No perecedero">No perecedero</option>
+                    <option value="Preparado">Preparado</option>
                   </select>
                 </div>
 
-                {/* Fecha */}
                 <div>
-                  <label className="font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                  <label className="font-semibold mb-2 flex items-center gap-2">
                     <Calendar size={18} /> Fecha de caducidad
                   </label>
                   <input
                     type="date"
+                    min={today}   // 👈🔥 BLOQUEA FECHAS PASADAS
                     value={form.fechaCaducidad}
                     onChange={(e) =>
                       setForm({ ...form, fechaCaducidad: e.target.value })
                     }
-                    className="w-full bg-white border border-[#dccdbb] rounded-xl px-4 py-3 shadow-sm"
+                    className="w-full border rounded-xl px-4 py-3"
                   />
+
                 </div>
               </div>
 
               {/* Descripción */}
               <div className="mt-6">
-                <label className="font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                <label className="font-semibold mb-2 flex items-center gap-2">
                   <Info size={18} /> Descripción
                 </label>
                 <textarea
                   rows={4}
-                  placeholder="Describe los alimentos que estás donando..."
-                  className="w-full bg-white border border-[#dccdbb] rounded-xl px-4 py-3 shadow-sm"
                   value={form.descripcion}
                   onChange={(e) =>
                     setForm({ ...form, descripcion: e.target.value })
                   }
+                  className="w-full border rounded-xl px-4 py-3"
                 />
               </div>
 
-              {/* Cantidad + Unidad */}
+              {/* Cantidad y Unidad */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
                 <div>
-                  <label className="font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                  <label className="font-semibold mb-2 flex items-center gap-2">
                     <Weight size={18} /> Cantidad
                   </label>
                   <input
@@ -217,53 +299,46 @@ const EditDonation = () => {
                     onChange={(e) =>
                       setForm({ ...form, cantidad: Number(e.target.value) })
                     }
-                    className="w-full bg-white border border-[#dccdbb] rounded-xl px-4 py-3 shadow-sm"
+                    className="w-full border rounded-xl px-4 py-3"
                   />
                 </div>
 
                 <div>
-                  <label className="font-semibold text-gray-700 flex items-center gap-2 mb-2">
-                    <Ruler size={18} /> Unidad de medida
+                  <label className="font-semibold mb-2 flex items-center gap-2">
+                    <Ruler size={18} /> Unidad
                   </label>
                   <select
                     value={form.unidad}
                     onChange={(e) => setForm({ ...form, unidad: e.target.value })}
-                    className="w-full bg-white border border-[#dccdbb] rounded-xl px-4 py-3 shadow-sm"
+                    className="w-full border rounded-xl px-4 py-3"
                   >
                     <option value="">Seleccione...</option>
                     {unidades.map((u) => (
-                      <option key={u} value={u}>
-                        {u}
-                      </option>
+                      <option key={u}>{u}</option>
                     ))}
                   </select>
                 </div>
               </div>
             </section>
 
-            {/* UBICACIÓN */}
-            <section className="mb-8 bg-[#faf6f1] border border-[#e5dacb] rounded-xl p-6">
-              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2 mb-5">
+            {/* ---------- UBICACIÓN ---------- */}
+            <section className="mb-8 bg-[#faf6f1] p-6 rounded-xl border">
+              <h2 className="text-xl font-bold mb-5 flex items-center gap-2">
                 <MapPin className="text-[#826c43]" /> Ubicación
               </h2>
 
-              <label className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                Dirección
-              </label>
+              <label className="font-semibold mb-2">Dirección</label>
+
               <input
                 type="text"
-                placeholder="Ej: Av. Heroínas 123, Cochabamba"
-                className="w-full bg-white border border-[#dccdbb] rounded-xl px-4 py-3 shadow-sm mb-4"
                 value={form.direccion}
-                onChange={(e) => setForm({ ...form, direccion: e.target.value })}
+                readOnly
+                className="w-full border rounded-xl px-4 py-3 mb-4 bg-gray-100"
               />
 
-              <div className="rounded-xl overflow-hidden shadow-md border border-[#dccdbb]">
+              <div className="rounded-xl overflow-hidden border shadow">
                 <MapContainer
-                  center={[
-                    form.lat ?? -17.3895,
-                    form.lng ?? -66.1568,
-                  ]}
+                  center={[form.lat ?? -17.3895, form.lng ?? -66.1568]}
                   zoom={13}
                   style={{ height: "350px", width: "100%" }}
                 >
@@ -274,130 +349,62 @@ const EditDonation = () => {
                   )}
                 </MapContainer>
               </div>
-
-              <p className="text-sm text-gray-600 mt-3">
-                Haz clic en el mapa para actualizar la ubicación exacta.
-              </p>
             </section>
 
-            {/* ESTADO DE LA DONACIÓN */}
-            <section className="mb-8 bg-[#faf6f1] border border-[#e5dacb] rounded-xl p-6">
-              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2 mb-5">
-                <Heart className="text-[#826c43]" /> Estado de Disponibilidad
+            {/* ---------- ESTADO ---------- */}
+            <section className="mb-8 bg-[#faf6f1] p-6 rounded-xl border">
+              <h2 className="text-xl font-bold mb-5 flex items-center gap-2">
+                <Heart className="text-[#826c43]" /> Estado
               </h2>
 
-              <p className="text-gray-600 mb-4">
-                Marca el estado actual de tu donación. Esto actualizará automáticamente el mapa.
-              </p>
-
-              <div className="flex flex-col md:flex-row gap-4">
-{/* Disponible */}
-<label
-  className={`flex items-center gap-3 p-4 rounded-xl cursor-pointer border shadow-sm transition
-    ${
-      form.estado === "Disponible"
-        ? "bg-[#dbeafe] border-blue-600"
-        : "bg-white border-[#dccdbb] hover:bg-[#f4ebdf]"
-    }`}
->
-  <input
-    type="radio"
-    name="estado"
-    value="Disponible"
-    checked={form.estado === "Disponible"}
-    onChange={(e) => setForm({ ...form, estado: e.target.value })}
-  />
-  <span className="font-semibold text-gray-700">Disponible</span>
-</label>
-
-                {/* Reservada */}
-                <label
-                  className={`flex items-center gap-3 p-4 rounded-xl cursor-pointer border shadow-sm transition
-                    ${
-                      form.estado === "Reservada"
-                        ? "bg-[#ffe9c9] border-[#e66748]"
-                        : "bg-white border-[#dccdbb] hover:bg-[#f4ebdf]"
-                    }`}
-                >
-                  <input
-                    type="radio"
-                    name="estado"
-                    value="Reservada"
-                    checked={form.estado === "Reservada"}
-                    onChange={(e) =>
-                      setForm({ ...form, estado: e.target.value })
-                    }
-                  />
-                  <span className="font-semibold text-gray-700">Reservada</span>
-                </label>
-
-                {/* Entregada */}
-                <label
-                  className={`flex items-center gap-3 p-4 rounded-xl cursor-pointer border shadow-sm transition
-                    ${
-                      form.estado === "Entregada"
-                        ? "bg-[#d8f3d3] border-green-600"
-                        : "bg-white border-[#dccdbb] hover:bg-[#f4ebdf]"
-                    }`}
-                >
-                  <input
-                    type="radio"
-                    name="estado"
-                    value="Entregada"
-                    checked={form.estado === "Entregada"}
-                    onChange={(e) =>
-                      setForm({ ...form, estado: e.target.value })
-                    }
-                  />
-                  <span className="font-semibold text-gray-700">Entregada</span>
-                </label>
-
-                {/* Cancelada */}
-                <label
-                  className={`flex items-center gap-3 p-4 rounded-xl cursor-pointer border shadow-sm transition
-                    ${
-                      form.estado === "Cancelada"
-                        ? "bg-[#f9d6d2] border-red-600"
-                        : "bg-white border-[#dccdbb] hover:bg-[#f4ebdf]"
-                    }`}
-                >
-                  <input
-                    type="radio"
-                    name="estado"
-                    value="Cancelada"
-                    checked={form.estado === "Cancelada"}
-                    onChange={(e) =>
-                      setForm({ ...form, estado: e.target.value })
-                    }
-                  />
-                  <span className="font-semibold text-gray-700">
-                    Cancelada
-                  </span>
-                </label>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {["Disponible", "Pendiente", "Entregada", "Cancelada"].map(
+                  (estado) => (
+                    <label
+                      key={estado}
+                      className={`flex items-center gap-3 p-4 rounded-xl cursor-pointer border shadow-sm ${
+                        form.estado === estado
+                          ? "bg-[#dbeafe] border-blue-600"
+                          : "bg-white border-[#dccdbb] hover:bg-[#f4ebdf]"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="estado"
+                        value={estado}
+                        checked={form.estado === estado}
+                        onChange={(e) =>
+                          setForm({ ...form, estado: e.target.value })
+                        }
+                      />
+                      <span className="font-semibold">{estado}</span>
+                    </label>
+                  )
+                )}
               </div>
             </section>
 
-            {/* IMÁGENES */}
-            <section className="mb-8 bg-[#faf6f1] border border-[#e5dacb] rounded-xl p-6">
-              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2 mb-5">
-                <FileImage className="text-[#826c43]" /> Imágenes de la donación
+            {/* ---------- IMÁGENES ---------- */}
+            <section className="mb-8 bg-[#faf6f1] p-6 rounded-xl border">
+              <h2 className="text-xl font-bold mb-5 flex items-center gap-2">
+                <FileImage className="text-[#826c43]" /> Imágenes
               </h2>
+              
 
+
+              {/* Área de subida */}
               <div
-                className="border-2 border-dashed border-[#826c43] rounded-xl p-10 text-center cursor-pointer hover:bg-[#f0e8dd] transition"
+                className="border-2 border-dashed border-[#826c43] rounded-xl p-10 text-center cursor-pointer"
                 onClick={() =>
                   document.getElementById("imageInputEdit")?.click()
                 }
               >
-                <CloudUpload
-                  size={55}
-                  className="mx-auto text-[#826c43] mb-3"
-                />
-                <p className="font-semibold text-gray-700">
+                <CloudUpload size={50} className="mx-auto text-[#826c43]" />
+                <p className="font-semibold mt-3">
                   Arrastra nuevas imágenes aquí
                 </p>
                 <p className="text-gray-500 text-sm">
-                  o haz clic para seleccionar archivos (máx. 5)
+                  o haz clic para seleccionar (máx. 5)
                 </p>
               </div>
 
@@ -411,21 +418,25 @@ const EditDonation = () => {
                   e.target.files && handleImageUpload(e.target.files)
                 }
               />
-
-              {images.length > 0 && (
+              
+              {/* Imágenes existentes */}
+              {existingImages.length > 0 && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
-                  {images.map((img, i) => (
+                  {existingImages.map((url, i) => (
                     <div key={i} className="relative">
                       <img
-                        src={URL.createObjectURL(img)}
+                        src={url}
                         className="w-full h-32 object-cover rounded-xl shadow"
                       />
+
                       <button
                         type="button"
+                        className="absolute top-2 right-2 bg-red-500 text-white w-7 h-7 rounded-full"
                         onClick={() =>
-                          setImages(images.filter((_, idx) => idx !== i))
+                          setExistingImages(
+                            existingImages.filter((_, idx) => idx !== i)
+                          )
                         }
-                        className="absolute top-2 right-2 bg-red-500 text-white w-7 h-7 rounded-full flex items-center justify-center shadow"
                       >
                         <X size={16} />
                       </button>
@@ -433,23 +444,52 @@ const EditDonation = () => {
                   ))}
                 </div>
               )}
+              
+              {/* Nuevas imágenes */}
+              {newImages.length > 0 && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+                  {newImages.map((img, i) => (
+                    <div key={i} className="relative">
+                      <img
+                        src={URL.createObjectURL(img)}
+                        className="w-full h-32 object-cover rounded-xl shadow"
+                      />
+
+                      <button
+                        type="button"
+                        className="absolute top-2 right-2 bg-red-500 text-white w-7 h-7 rounded-full"
+                        onClick={() =>
+                          setNewImages(
+                            newImages.filter((_, idx) => idx !== i)
+                          )
+                        }
+                      >
+                        <X size={16} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <p className="text-gray-700 font-medium mb-3">
+                {existingImages.length + newImages.length} / 5 imágenes
+              </p>
             </section>
 
-            {/* ACCIONES */}
+            {/* ---------- BOTONES ---------- */}
             <div className="flex flex-col md:flex-row gap-4 justify-center mt-8">
               <button
                 type="submit"
-                className="flex items-center justify-center gap-2 bg-gradient-to-r from-[#826c43] to-[#e66748] text-white px-8 py-3 rounded-xl shadow-lg hover:scale-[1.03] transition"
+                className="bg-gradient-to-r from-[#826c43] to-[#e66748] text-white px-8 py-3 rounded-xl shadow-lg"
               >
-                <Heart size={18} /> Guardar cambios
+                Guardar cambios
               </button>
 
               <button
                 type="button"
                 onClick={() => navigate("/dashboard")}
-                className="flex items-center justify-center gap-2 bg-gray-300 text-gray-800 px-8 py-3 rounded-xl shadow-md hover:scale-[1.03] transition"
+                className="bg-gray-300 text-gray-800 px-8 py-3 rounded-xl shadow-md"
               >
-                <ArrowLeft size={18} /> Cancelar
+                Cancelar
               </button>
             </div>
           </form>

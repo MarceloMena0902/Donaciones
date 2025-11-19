@@ -6,6 +6,7 @@ import notificationsRoutes from "./routes/notifications.routes.js";
 import messagesRoutes from "./routes/messages.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import uploadRoutes from "./routes/upload.routes.js";
+import requestRoutes from "./routes/requests.routes.js";
 
 const app = express();
 
@@ -23,5 +24,6 @@ app.use("/api/messages", messagesRoutes);
 app.use("/api/auth", authRoutes);
 app.use(cors({ origin: "http://localhost:5173" }));
 app.use("/api/upload", uploadRoutes);
+app.use("/api/requests", requestRoutes);
 
 export default app;

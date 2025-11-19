@@ -1,3 +1,4 @@
+// src/pages/CreateDonation.tsx
 import { useState } from "react";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
@@ -44,6 +45,7 @@ type DonationForm = {
 const unidades = ["kg", "L", "unidad", "caja"];
 
 const CreateDonation = () => {
+  const { user } = useAuth();
   const [form, setForm] = useState<DonationForm>({
     tipo: "",
     fechaCaducidad: "",
@@ -56,75 +58,103 @@ const CreateDonation = () => {
   });
 
   const [images, setImages] = useState<File[]>([]);
+  const today = new Date().toISOString().split("T")[0];
+
   const API_URL = "http://localhost:4000/api/donations";
 
-  const { user } = useAuth();
-
-  // 🟢 EVITAR problemas: si user no está listo, mostrar loading
-  if (!user) {
+  if (!user)
     return (
       <div className="min-h-screen flex items-center justify-center text-xl">
         Cargando usuario...
       </div>
     );
-  }
 
-  // -------------------------------------------------------------
-  //    SELECCIONAR UBICACIÓN EN MAPA
-  // -------------------------------------------------------------
-  const handleMapClick = (e: any) => {
-    setForm({
-      ...form,
-      lat: e.latlng.lat,
-      lng: e.latlng.lng,
-    });
-  };
-
+  // ----------------------------------------------------------------
+  // 1️⃣ Reverse geocoding (obtener dirección AUTOMÁTICA del pin)
+  // ----------------------------------------------------------------
   const LocationSelector = () => {
     useMapEvents({
-      click: handleMapClick,
+      click: async (e) => {
+        const lat = e.latlng.lat;
+        const lng = e.latlng.lng;
+
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`
+          );
+          const data = await res.json();
+          const address = data.display_name || "Dirección no encontrada";
+
+          setForm((prev) => ({
+            ...prev,
+            lat,
+            lng,
+            direccion: address,
+          }));
+        } catch (err) {
+          console.log("Error obteniendo dirección:", err);
+        }
+      },
     });
+
     return null;
   };
 
-  // -------------------------------------------------------------
-  //   SUBIR IMÁGENES
-  // -------------------------------------------------------------
+  // ----------------------------------------------------------------
+  // 2️⃣ Manejo de nuevas imágenes (máx 5)
+  // ----------------------------------------------------------------
   const handleImageUpload = (files: FileList) => {
-    const newFiles = [...images, ...Array.from(files)].slice(0, 5);
-    setImages(newFiles);
+    const selected = Array.from(files);
+    const total = images.length;
+    const slots = 5 - total;
+
+    if (slots <= 0) return;
+
+    setImages([...images, ...selected.slice(0, slots)]);
   };
 
-  // -------------------------------------------------------------
-  //         ENVIAR DONACIÓN
-  // -------------------------------------------------------------
+  // ----------------------------------------------------------------
+  // 3️⃣ Subir imágenes → Cloudinary vía backend
+  // ----------------------------------------------------------------
+  const uploadImages = async (): Promise<string[]> => {
+    const urls: string[] = [];
+
+    for (const img of images) {
+      const formData = new FormData();
+      formData.append("image", img);
+
+      const res = await axios.post(
+        "http://localhost:4000/api/donations/upload-image",
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+
+      urls.push(res.data.url);
+    }
+
+    return urls;
+  };
+
+  // ----------------------------------------------------------------
+  // 4️⃣ Enviar donación al backend
+  // ----------------------------------------------------------------
   const submitDonation = async (e: any) => {
     e.preventDefault();
 
-    // 1️⃣ Validar que usuario esté cargado
-    if (!user?.uid) {
-      Swal.fire({
-        icon: "error",
-        title: "Error de autenticación",
-        text: "Inicia sesión nuevamente para crear una donación.",
-        confirmButtonColor: "#e66748",
-      });
-      return;
-    }
-
-    // 2️⃣ Validar campos del formulario
     if (!form.tipo || !form.descripcion || !form.unidad || !form.lat || !form.lng) {
       Swal.fire({
         icon: "error",
         title: "Campos incompletos",
-        text: "Por favor completa toda la información requerida.",
+        text: "Completa los campos requeridos.",
         confirmButtonColor: "#e66748",
       });
       return;
     }
 
     try {
-      // 🔥 GUARDA userId REAL
+      // 🔥 Primero subir imágenes
+      const imageUrls = await uploadImages();
+
       const donationToSend = {
         userId: user.uid,
         type: form.tipo,
@@ -137,172 +167,159 @@ const CreateDonation = () => {
           lng: form.lng,
         },
         expirationDate: form.fechaCaducidad || null,
+        images: imageUrls,
       };
 
-      console.log("🔥 Enviando donación a backend:", donationToSend);
-
-      const res = await axios.post(API_URL, donationToSend);
+      await axios.post(API_URL, donationToSend);
 
       Swal.fire({
         icon: "success",
         title: "Donación creada",
-        text: "La donación ha sido registrada correctamente 🎉",
+        text: "Se registró correctamente 🎉",
         confirmButtonColor: "#826c43",
-      }).then(() => {
-        window.location.href = "/dashboard";
-      });
+      }).then(() => (window.location.href = "/dashboard"));
     } catch (err: any) {
-      console.log("❌ Error al guardar:", err.response?.data || err);
+      console.log("Error:", err);
 
       Swal.fire({
         icon: "error",
-        title: "Error al guardar",
-        text: err.response?.data?.error || "No se pudo registrar la donación",
+        title: "Error al crear donación",
+        text: "Revisa los datos o intenta nuevamente",
         confirmButtonColor: "#e66748",
       });
     }
   };
 
+  // ----------------------------------------------------------------
+  // 5️⃣ UI
+  // ----------------------------------------------------------------
   return (
     <>
       <NavbarLogged />
 
-      <div className="min-h-screen w-full bg-[#f5efe7] pt-10 pb-10 relative overflow-hidden">
-
-        {/* HEADER */}
+      <div className="min-h-screen w-full bg-[#f5efe7] pt-10 pb-10">
         <div className="max-w-5xl mx-auto mb-10">
-          <div className="bg-white rounded-2xl shadow-lg p-8 border border-[#e5dacb] relative">
-
-            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#826c43] to-[#e66748]" />
-
+          <div className="bg-white rounded-2xl shadow-lg p-8 border border-[#e5dacb]">
             <h1 className="text-4xl font-extrabold text-gray-800 flex items-center gap-3">
               <Heart className="text-[#826c43]" />
               Crear Nueva Donación
             </h1>
-
             <p className="text-gray-600 mt-2">
               Comparte alimentos y ayuda a tu comunidad ❤️
             </p>
           </div>
         </div>
 
-        {/* FORMULARIO */}
         <form
           onSubmit={submitDonation}
-          className="max-w-5xl mx-auto bg-white rounded-2xl shadow-xl p-10 border border-[#e5dacb]"
+          className="max-w-5xl mx-auto bg-white rounded-2xl shadow-xl p-10 border"
         >
-          {/* INFORMACIÓN BÁSICA */}
-          <section className="mb-10 bg-[#faf6f1] border border-[#e5dacb] rounded-xl p-6">
-            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2 mb-5">
+          {/* ---------------------- INFORMACIÓN ---------------------- */}
+          <section className="mb-10 bg-[#faf6f1] border rounded-xl p-6">
+            <h2 className="text-xl font-bold mb-5 flex gap-2 items-center">
               <Info className="text-[#826c43]" /> Información Básica
             </h2>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-
               {/* Tipo */}
               <div>
-                <label className="font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                <label className="font-semibold mb-2 flex gap-2 items-center">
                   <Apple size={18} /> Tipo de alimento
                 </label>
                 <select
                   value={form.tipo}
                   onChange={(e) => setForm({ ...form, tipo: e.target.value })}
-                  className="w-full bg-white border border-[#dccdbb] rounded-xl px-4 py-3 shadow-sm"
+                  className="w-full border rounded-xl px-4 py-3"
                 >
                   <option value="">Seleccione...</option>
-                  <option value="Perecedero">🥬 Perecedero</option>
-                  <option value="No perecedero">🥫 No perecedero</option>
-                  <option value="Preparado">🍲 Preparado</option>
+                  <option value="Perecedero">Perecedero</option>
+                  <option value="No perecedero">No perecedero</option>
+                  <option value="Preparado">Preparado</option>
                 </select>
               </div>
 
               {/* Fecha */}
               <div>
-                <label className="font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                <label className="font-semibold mb-2 flex gap-2 items-center">
                   <Calendar size={18} /> Fecha de caducidad
                 </label>
                 <input
                   type="date"
+                  min={today}            // 🔥 evita elegir fechas pasadas
                   value={form.fechaCaducidad}
                   onChange={(e) =>
                     setForm({ ...form, fechaCaducidad: e.target.value })
                   }
-                  className="w-full bg-white border border-[#dccdbb] rounded-xl px-4 py-3 shadow-sm"
+                  className="w-full border rounded-xl px-4 py-3"
                 />
               </div>
             </div>
 
             {/* Descripción */}
             <div className="mt-6">
-              <label className="font-semibold text-gray-700 flex items-center gap-2 mb-2">
+              <label className="font-semibold mb-2 flex gap-2 items-center">
                 <Info size={18} /> Descripción
               </label>
               <textarea
                 rows={4}
-                placeholder="Describe los alimentos que deseas donar..."
-                className="w-full bg-white border border-[#dccdbb] rounded-xl px-4 py-3 shadow-sm"
                 value={form.descripcion}
                 onChange={(e) =>
                   setForm({ ...form, descripcion: e.target.value })
                 }
+                className="w-full border rounded-xl px-4 py-3"
               />
             </div>
 
-            {/* Cantidad + unidad */}
+            {/* Cantidad + Unidad */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
               <div>
-                <label className="font-semibold text-gray-700 flex items-center gap-2 mb-2">
+                <label className="font-semibold mb-2 flex gap-2 items-center">
                   <Weight size={18} /> Cantidad
                 </label>
                 <input
                   type="number"
-                  min={0}
                   value={form.cantidad}
+                  min={1}
                   onChange={(e) =>
                     setForm({ ...form, cantidad: Number(e.target.value) })
                   }
-                  className="w-full bg-white border border-[#dccdbb] rounded-xl px-4 py-3 shadow-sm"
+                  className="w-full border rounded-xl px-4 py-3"
                 />
               </div>
 
               <div>
-                <label className="font-semibold text-gray-700 flex items-center gap-2 mb-2">
-                  <Ruler size={18} /> Unidad de medida
+                <label className="font-semibold mb-2 flex gap-2 items-center">
+                  <Ruler size={18} /> Unidad
                 </label>
                 <select
                   value={form.unidad}
                   onChange={(e) => setForm({ ...form, unidad: e.target.value })}
-                  className="w-full bg-white border border-[#dccdbb] rounded-xl px-4 py-3 shadow-sm"
+                  className="w-full border rounded-xl px-4 py-3"
                 >
                   <option value="">Seleccione...</option>
                   {unidades.map((u) => (
-                    <option key={u} value={u}>
-                      {u}
-                    </option>
+                    <option key={u}>{u}</option>
                   ))}
                 </select>
               </div>
             </div>
           </section>
 
-          {/* UBICACIÓN */}
-          <section className="mb-10 bg-[#faf6f1] border border-[#e5dacb] rounded-xl p-6">
-            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2 mb-5">
+          {/* ---------------------- UBICACIÓN ---------------------- */}
+          <section className="mb-10 bg-[#faf6f1] border rounded-xl p-6">
+            <h2 className="text-xl font-bold mb-5 flex gap-2 items-center">
               <MapPin className="text-[#826c43]" /> Ubicación
             </h2>
 
-            <label className="font-semibold text-gray-700 mb-2 flex items-center gap-2">
-              Dirección
-            </label>
+            <label className="font-semibold">Dirección (automática)</label>
             <input
               type="text"
-              placeholder="Ej: Av. Heroínas 123, Cochabamba"
-              className="w-full bg-white border border-[#dccdbb] rounded-xl px-4 py-3 shadow-sm mb-4"
               value={form.direccion}
-              onChange={(e) => setForm({ ...form, direccion: e.target.value })}
+              readOnly
+              className="w-full border rounded-xl px-4 py-3 mb-4 bg-gray-100"
             />
 
-            <div className="rounded-xl overflow-hidden shadow-md border border-[#dccdbb]">
+            <div className="rounded-xl overflow-hidden border shadow">
               <MapContainer
                 center={[-17.3895, -66.1568]}
                 zoom={13}
@@ -310,7 +327,6 @@ const CreateDonation = () => {
               >
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                 <LocationSelector />
-
                 {form.lat && form.lng && (
                   <Marker position={[form.lat, form.lng]} />
                 )}
@@ -318,23 +334,25 @@ const CreateDonation = () => {
             </div>
 
             <p className="text-sm text-gray-600 mt-3">
-              Haga clic en el mapa para seleccionar la ubicación exacta.
+              Selecciona un punto en el mapa para obtener la dirección exacta.
             </p>
           </section>
 
-          {/* IMÁGENES */}
-          <section className="mb-10 bg-[#faf6f1] border border-[#e5dacb] rounded-xl p-6">
-            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2 mb-5">
-              <FileImage className="text-[#826c43]" /> Imágenes de la donación
+          {/* ---------------------- IMÁGENES ---------------------- */}
+          <section className="mb-10 bg-[#faf6f1] border rounded-xl p-6">
+            <h2 className="text-xl font-bold mb-5 flex gap-2 items-center">
+              <FileImage className="text-[#826c43]" /> Imágenes
             </h2>
 
             <div
-              className="border-2 border-dashed border-[#826c43] rounded-xl p-10 text-center cursor-pointer hover:bg-[#f0e8dd] transition"
+              className="border-2 border-dashed border-[#826c43] rounded-xl p-10 text-center cursor-pointer"
               onClick={() => document.getElementById("imageInput")?.click()}
             >
-              <CloudUpload size={55} className="mx-auto text-[#826c43] mb-3" />
-              <p className="font-semibold text-gray-700">Arrastra las imágenes aquí</p>
-              <p className="text-gray-500 text-sm">o haz clic para seleccionar archivos</p>
+              <CloudUpload size={55} className="mx-auto text-[#826c43]" />
+              <p className="font-semibold mt-2">
+                Arrastra imágenes o haz clic aquí
+              </p>
+              <p className="text-sm text-gray-500">(máximo 5 imágenes)</p>
             </div>
 
             <input
@@ -345,8 +363,8 @@ const CreateDonation = () => {
               className="hidden"
               onChange={(e) => handleImageUpload(e.target.files!)}
             />
+            
 
-            {/* PREVIEW */}
             {images.length > 0 && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
                 {images.map((img, i) => (
@@ -355,13 +373,12 @@ const CreateDonation = () => {
                       src={URL.createObjectURL(img)}
                       className="w-full h-32 object-cover rounded-xl shadow"
                     />
-
                     <button
                       type="button"
                       onClick={() =>
                         setImages(images.filter((_, idx) => idx !== i))
                       }
-                      className="absolute top-2 right-2 bg-red-500 text-white w-7 h-7 rounded-full flex items-center justify-center shadow"
+                      className="absolute top-2 right-2 bg-red-500 text-white w-7 h-7 rounded-full"
                     >
                       <X size={16} />
                     </button>
@@ -369,29 +386,30 @@ const CreateDonation = () => {
                 ))}
               </div>
             )}
+            {images.length > 0 && (
+              <p className="text-sm">
+                {images.length} / 5 imágenes
+              </p>
+            )}
           </section>
 
-          {/* ACCIONES */}
+          {/* ---------------------- BOTONES ---------------------- */}
           <div className="flex flex-col md:flex-row gap-4 justify-center mt-10">
             <button
               type="submit"
-              className="flex items-center justify-center gap-2 
-              bg-gradient-to-r from-[#826c43] to-[#e66748] text-white 
-              px-8 py-3 rounded-xl shadow-lg hover:scale-[1.03] transition"
+              className="bg-gradient-to-r from-[#826c43] to-[#e66748] text-white px-8 py-3 rounded-xl shadow-lg"
             >
-              <Heart size={18} /> Crear Donación
+              Crear Donación
             </button>
 
             <button
               type="button"
-              onClick={() => (window.location.href = "/donations")}
-              className="flex items-center justify-center gap-2 
-              bg-gray-300 px-8 py-3 rounded-xl shadow hover:scale-[1.03] transition"
+              onClick={() => (window.location.href = "/dashboard")}
+              className="bg-gray-300 px-8 py-3 rounded-xl shadow"
             >
-              <ArrowLeft size={18} /> Cancelar
+              Cancelar
             </button>
           </div>
-
         </form>
       </div>
     </>

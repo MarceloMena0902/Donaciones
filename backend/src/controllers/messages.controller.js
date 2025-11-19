@@ -1,6 +1,7 @@
 import { realtimeDb } from "../config/firebase.js";
 
 // Enviar mensaje
+// NO guardar en Firebase, solo devolver confirmación
 export const sendMessage = async (req, res) => {
   try {
     const { chatId, senderId, receiverId, content } = req.body;
@@ -9,19 +10,15 @@ export const sendMessage = async (req, res) => {
       return res.status(400).json({ error: "Faltan campos obligatorios." });
     }
 
-    const messageRef = realtimeDb.ref(`chats/${chatId}`).push();
-    await messageRef.set({
-      senderId,
-      receiverId,
-      content,
-      timestamp: Date.now(),
-    });
+    // Aquí podrías guardar historial en Mongo o SQL si quieres.
+    // PERO NO EN FIREBASE.
 
-    res.status(200).json({ message: "Mensaje enviado correctamente." });
+    res.status(200).json({ message: "Mensaje recibido por backend." });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
+
 
 // Obtener mensajes del chat
 export const getMessages = async (req, res) => {

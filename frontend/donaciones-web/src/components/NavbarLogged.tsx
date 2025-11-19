@@ -2,48 +2,109 @@ import { Bell, LogOut, Menu, Send, User, MapPin, ListChecks } from "lucide-react
 import { Link, useNavigate } from "react-router-dom";
 import { useState, useEffect, useRef } from "react";
 import { useAuth } from "../context/AuthContext";
+import { collection, addDoc, getDocs, query, where, serverTimestamp } from "firebase/firestore";
+import { firestoreDb } from "../firebaseConfig";
+import axios from "axios";
+import Swal from "sweetalert2";
+
 
 type Notificacion = {
-  message: string;
+  id: string;
+  message: string;        // contenido visible
+  preview?: string;       // mensaje REAL del usuario
+  requesterId?: string;
+  donationId?: string;
+  type?: string;
   date: string;
   read: boolean;
-  type?: string;   // <- Para saber si es una solicitud
 };
+
 
 const NavbarLogged = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
 
-  const [notifications, setNotifications] = useState<Notificacion[]>([
-    {
-      message: "Ignacio quiere contactar sobre tu donación 🍎",
-      date: "Hace 1 minuto",
-      read: false,
-      type: "solicitud",
-    },
-    {
-      message: "Tu donación está próxima a caducar.",
-      date: "Hace 5 horas",
-      read: false,
-    },
-    {
-      message: "Tu donación fue reservada por un receptor.",
-      date: "Ayer",
-      read: false,
-    },
-  ]);
-
+  const [notifications, setNotifications] = useState<Notificacion[]>([]);
   const [notifOpen, setNotifOpen] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+  const [requesterName, setRequesterName] = useState("");
 
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   // ⭐ Nuevo modal para solicitud
   const [showSolicitudModal, setShowSolicitudModal] = useState(false);
-const [previewMessage, setPreviewMessage] = useState(
-  "Hola, estoy interesado en tu donación ❤️"
-);
+  const [previewMessage, setPreviewMessage] = useState("");
+  const [activeRequest, setActiveRequest] = useState<any | null>(null);
+
+   const normalizeDate = (createdAt: any) => {
+  try {
+    if (!createdAt) return "";
+
+    let date;
+
+    if (createdAt._seconds) {
+      date = new Date(createdAt._seconds * 1000);
+    } else {
+      date = new Date(createdAt);
+    }
+
+    // Convertir a hora Boliviana
+    return date.toLocaleString("es-BO", {
+      timeZone: "America/La_Paz",
+      hour12: false,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+    });
+
+  } catch {
+    return "";
+  }
+};
+
+    const removeDuplicateNotifications = (array: any[]) => {
+    return Array.from(
+      new Map(array.map(n => [`${n.message}-${n.date}`, n])).values()
+    );
+  };
+
+useEffect(() => {
+  if (!user?.uid) return;
+   
+  const fetchNotifications = async () => {
+    try {
+      const res = await axios.get(`http://localhost:4000/api/notifications/${user.uid}`);
+
+      const parsed: Notificacion[] = res.data.map((n: any) => ({
+        id: n.id,
+        message: n.content,        // el título visible
+        preview: n.preview,        // el mensaje REAL
+        requesterId: n.requesterId,
+        donationId: n.donationId,
+        type: n.type,
+        date: normalizeDate(n.createdAt),
+        read: n.read || false,
+      }));
+
+
+
+      const filtered = removeDuplicateNotifications(parsed);
+      setNotifications(filtered);
+    } catch (error) {
+      console.log("Error cargando notificaciones:", error);
+    }
+  };
+
+  fetchNotifications();
+  const interval = setInterval(fetchNotifications, 2000);
+
+  return () => clearInterval(interval);
+}, [user]);
+
 
   const unreadCount = notifications.filter((n) => !n.read).length;
 
@@ -64,6 +125,66 @@ const [previewMessage, setPreviewMessage] = useState(
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+const markNotificationAsRead = async (notifId: string) => {
+  try {
+    await axios.put(`http://localhost:4000/api/notifications/${notifId}/read`);
+  } catch (err) {
+    console.log("Error marcando notificación como leída:", err);
+  }
+};
+const aceptarSolicitud = async () => {
+  if (!activeRequest || !user) return;
+
+  await markNotificationAsRead(activeRequest.id);
+  setShowSolicitudModal(false);
+
+  const requesterId = activeRequest.requesterId;   // quien escribió
+  const donorId = user.uid;                        // el dueño de la donación
+  const requesterNameValue = requesterName;           // ya lo tienes
+  const donorName = user.displayName || "Usuario";
+
+  // 1️⃣ Buscar si ya existe un chat entre los dos
+  const q = query(
+    collection(firestoreDb, "chats"),
+    where("participants", "array-contains", donorId)
+  );
+
+  const existing = await getDocs(q);
+
+  let chatId = null;
+
+  existing.forEach(docSnap => {
+    const chat = docSnap.data();
+    if (chat.participants.includes(requesterId)) {
+      chatId = docSnap.id;
+    }
+  });
+
+  // 2️⃣ Si no existe, crear el chat
+  if (!chatId) {
+    const newChat = await addDoc(collection(firestoreDb, "chats"), {
+      participants: [donorId, requesterId],
+      names: {
+        [donorId]: donorName,
+        [requesterId]: requesterName
+      },
+      createdAt: serverTimestamp()
+    });
+    chatId = newChat.id;
+  }
+
+  // 3️⃣ Redirigir al chat REAL
+  navigate(`/chats`);
+};
+
+const rechazarSolicitud = async () => {
+  if (!activeRequest) return;
+
+  await markNotificationAsRead(activeRequest.id);
+  setShowSolicitudModal(false);
+};
+
+
   const toggleNotifications = () => {
     if (!notifOpen) {
       setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
@@ -74,11 +195,24 @@ const [previewMessage, setPreviewMessage] = useState(
   // ======================
   // Al hacer clic en una notificación
   // ======================
-  const handleNotificationClick = (notif: Notificacion) => {
-    if (notif.type === "solicitud") {
-      setShowSolicitudModal(true);
+  const handleNotificationClick = async (notif: Notificacion) => {
+    setActiveRequest(notif);
+    setPreviewMessage(notif.preview || notif.message);
+  // Traer nombre del usuario que envió la solicitud
+    if (notif.requesterId) {
+      try {
+        const res = await axios.get(`http://localhost:4000/api/users/${notif.requesterId}`);
+        setRequesterName(res.data.name || "Usuario");
+      } catch {
+        setRequesterName("Usuario");
+      }
+    } else {
+      setRequesterName("Usuario");
     }
-  };
+
+    setShowSolicitudModal(true);
+};
+
 
   return (
     <>
@@ -88,7 +222,7 @@ const [previewMessage, setPreviewMessage] = useState(
       <nav className="w-full bg-white shadow-md border-b border-[#e5dacb] px-8 py-4 flex items-center justify-between sticky top-0 z-50">
         {/* LOGO */}
         <Link to="/dashboard" className="text-2xl font-extrabold text-[#121212]">
-          <span className="text-[#826c43]">cuba_</span>project
+          <span className="text-[#826c43]">Cochabamba</span> Comparte
         </Link>
 
         <div className="flex items-center gap-6">
@@ -140,7 +274,7 @@ const [previewMessage, setPreviewMessage] = useState(
 
           {/* ✈️ MENSAJES */}
           <button
-            onClick={() => user && navigate(`/chat/${user.uid}?name=Yo`)}
+            onClick={() => navigate("/chats")}
             className="hover:scale-110 transition"
           >
             <Send className="text-[#826c43]" size={24} />
@@ -180,7 +314,10 @@ const [previewMessage, setPreviewMessage] = useState(
 
                 <div className="border-t border-[#e8dccb] mt-3 pt-3">
                   <button
-                    onClick={logout}
+                    onClick={() => {
+                      logout();
+                      navigate("/mapa-donantes", { replace: true });
+                    }}
                     className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-red-600 hover:bg-red-50 transition font-semibold"
                   >
                     <LogOut size={20} /> Cerrar Sesión
@@ -218,7 +355,7 @@ const [previewMessage, setPreviewMessage] = useState(
       {/* ⭐ BURBUJA DEL MENSAJE */}
       <div className="bg-[#f8f4ed] p-4 rounded-xl shadow-md border border-[#e5dacb] mb-6">
         <p className="text-[#4a4a4a] text-sm leading-relaxed">
-          <strong>Mensaje recibido:</strong>  
+          <strong>Mensaje recibido de {requesterName}:</strong> 
         </p>
         <p className="mt-1 text-[#40352a] font-medium">
           “{previewMessage}”
@@ -228,24 +365,22 @@ const [previewMessage, setPreviewMessage] = useState(
       {/* Botones */}
       <div className="flex gap-4">
         <button
-          onClick={() => {
-            setShowSolicitudModal(false);
-            navigate("/chat/solicitud?name=Donante");
-          }}
+          onClick={aceptarSolicitud}
           className="w-full py-3 bg-gradient-to-r from-[#826c43] to-[#e66748] 
           text-white rounded-xl shadow hover:scale-105 transition font-semibold"
         >
-          Abrir Chat
+          Aceptar
         </button>
 
         <button
-          onClick={() => setShowSolicitudModal(false)}
+          onClick={rechazarSolicitud}
           className="w-full py-3 bg-gray-200 text-gray-700 rounded-xl 
           hover:bg-gray-300 transition font-semibold"
         >
-          Cancelar
+          Rechazar
         </button>
       </div>
+
     </div>
   </div>
 )}

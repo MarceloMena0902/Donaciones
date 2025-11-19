@@ -17,10 +17,10 @@ const navigate = useNavigate();
   className="group relative text-2xl font-extrabold tracking-tight select-none"
 >
   <span className="text-[#0d0d0d] group-hover:text-[#826c43] transition-colors">
-    cuba
+    Cochabamba
   </span>
   <span className="text-[#826c43] group-hover:text-[#b56b37] transition-colors">
-    _project
+    comparte
   </span>
 
   {/* Barra animada */}

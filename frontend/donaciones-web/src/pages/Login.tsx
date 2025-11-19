@@ -75,7 +75,7 @@ const Login = () => {
         <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#826c43] to-[#e66748]" />
 
         <h2 className="text-3xl font-extrabold text-[#121212] text-center mb-2">
-          Iniciar Sesión
+          Iniciar Sesión para interactuar con los donantes
         </h2>
 
         <p className="text-center text-gray-600 mb-6">

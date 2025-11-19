@@ -5,11 +5,12 @@ import {
   signOut,
   type User
 } from "firebase/auth";
+import { useNavigate } from "react-router-dom";
 
 type AuthContextType = {
   user: User | null;
   loading: boolean;
-  logout: () => Promise<void>;   // 👈 SE AGREGA
+  logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -17,6 +18,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const navigate = useNavigate();
 
   // Mantener sesión
   useEffect(() => {
@@ -28,11 +31,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return unsubscribe;
   }, []);
 
-  // 🔥 Logout real
+  // 🔥 Logout real + bloqueo de botón atrás
   const logout = async () => {
     await signOut(auth);
     setUser(null);
     localStorage.removeItem("token");
+
+    // BORRAR HISTORIAL para que el botón ATRÁS no regrese
+    navigate("/mapa-donantes", { replace: true });
+
+    // Forzar a borrar cache de historial
+    window.history.pushState(null, "", window.location.href);
   };
 
   return (

@@ -9,7 +9,7 @@ import {
 import {
   getDatabase
 } from "firebase/database";
-
+import { getFirestore } from "firebase/firestore"; 
 const firebaseConfig = {
   apiKey: "AIzaSyCRRbqkr9AVNPJkb79GfdDcT6gGdQtu2uE",
   authDomain: "donaciones-e6a4f.firebaseapp.com",
@@ -29,5 +29,5 @@ export const facebookProvider = new FacebookAuthProvider();
 
 // ⭐ Realtime DB (LO QUE NECESITAS)
 export const realtimeDb = getDatabase(app);
-
+export const firestoreDb = getFirestore(app); 
 export default app;

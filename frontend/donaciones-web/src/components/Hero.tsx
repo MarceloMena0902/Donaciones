@@ -14,7 +14,7 @@ const Hero = () => {
           <h1 className="text-5xl font-extrabold leading-tight text-[#121212]">
             Bienvenido a{" "}
             <span className="bg-gradient-to-r from-[#b67343] to-[#e66748] text-transparent bg-clip-text">
-              Cuba Project
+              Cochabamba Comparte
             </span>
           </h1>
 

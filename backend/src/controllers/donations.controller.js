@@ -3,7 +3,16 @@ import { db } from "../config/firebase.js";
 // Crear donación
 export const createDonation = async (req, res) => {
   try {
-    const { userId, type, description, quantity, unit, location, expirationDate } = req.body;
+    const {
+      userId,
+      type,
+      description,
+      quantity,
+      unit,
+      location,
+      expirationDate,
+      images
+    } = req.body;
 
     if (!userId || !type || !description || !quantity || !unit) {
       return res.status(400).json({ error: "Faltan datos obligatorios para la donación." });
@@ -11,13 +20,14 @@ export const createDonation = async (req, res) => {
 
     const donationRef = await db.collection("donations").add({
       userId,
-      type, // Perecedero / No perecedero / Preparado
+      type,
       description,
       quantity,
-      unit, // kg, litros, unidades
+      unit,
       location: location || null,
-      status: "Disponible",
       expirationDate: expirationDate || null,
+      status: "Disponible",
+      images: images || [],  // 🔥 NUEVO
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -63,7 +73,16 @@ export const getDonationById = async (req, res) => {
 export const updateDonation = async (req, res) => {
   try {
     const { id } = req.params;
-    const { type, description, quantity, unit, location, status } = req.body;
+    const {
+      type,
+      description,
+      quantity,
+      unit,
+      location,
+      status,
+      expirationDate,
+      images
+    } = req.body;
 
     const donationRef = db.collection("donations").doc(id);
     const doc = await donationRef.get();
@@ -73,14 +92,17 @@ export const updateDonation = async (req, res) => {
     }
 
     await donationRef.update({
-      type: type || doc.data().type,
-      description: description || doc.data().description,
-      quantity: quantity || doc.data().quantity,
-      unit: unit || doc.data().unit,
-      location: location || doc.data().location,
-      status: status || doc.data().status,
+      type,
+      description,
+      quantity,
+      unit,
+      location,
+      expirationDate,
+      status,
+      images,          // 🔥 URLs finales enviadas desde el front
       updatedAt: new Date(),
     });
+
 
     res.status(200).json({ message: "Donación actualizada correctamente." });
   } catch (error) {
@@ -98,6 +120,31 @@ export const deleteDonation = async (req, res) => {
 
     res.status(200).json({ message: "Donación eliminada correctamente." });
   } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+// Obtener donaciones por ID de usuario
+export const getDonationsByUser = async (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    if (!userId) {
+      return res.status(400).json({ error: "Faltan parámetros: userId es obligatorio." });
+    }
+
+    const snapshot = await db
+      .collection("donations")
+      .where("userId", "==", userId)
+      .get();
+
+    const donations = snapshot.docs.map(doc => ({
+      id: doc.id,
+      ...doc.data(),
+    }));
+
+    res.status(200).json(donations);
+  } catch (error) {
+    console.log("❌ ERROR en getDonationsByUser:", error);
     res.status(500).json({ error: error.message });
   }
 };

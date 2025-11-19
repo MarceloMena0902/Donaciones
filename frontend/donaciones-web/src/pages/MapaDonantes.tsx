@@ -13,7 +13,7 @@ import NavbarLogged from "../components/NavbarLogged";
 import { useAuth } from "../context/AuthContext";
 import "leaflet/dist/leaflet.css";
 import axios from "axios";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 const API_URL = "http://localhost:4000/api/donations";
 
@@ -43,7 +43,7 @@ const MapaDonantes = () => {
   const [loading, setLoading] = useState(true);
   const [categoria, setCategoria] = useState("Todos");
   const { user } = useAuth();
-
+const navigate = useNavigate();
   // ⭐ Donaciones estáticas para pruebas
   const staticDonations = [
     {
@@ -101,19 +101,35 @@ const MapaDonantes = () => {
 
     load();
   }, []);
-
-  // ⭐ FILTRO REAL
-  const filtradas =
+    const filtradas =
     categoria === "Todos"
       ? donations
       : donations.filter((d) => d.type === categoria);
 
-  const donacionesConUbicacion = filtradas.filter(
-    (d) =>
-      d.location &&
-      typeof d.location.lat === "number" &&
-      typeof d.location.lng === "number"
-  );
+
+  // ⭐ FILTRO REAL PARA OCULTAR VENCIDAS
+//   const isExpired = (expirationDate: string) => {
+//   if (!expirationDate) return false; // si no hay fecha explícita, no se considera vencido
+//   const today = new Date();
+//   const exp = new Date(expirationDate);
+//   return exp < today; // vencido si la fecha es menor a hoy
+// };
+
+//   const donacionesConUbicacion = filtradas.filter(
+//   (d) =>
+//     d.location &&
+//     typeof d.location.lat === "number" &&
+//     typeof d.location.lng === "number" &&
+//     !isExpired(d.expirationDate) // 👈 NO mostrar vencidas
+// );
+const donacionesConUbicacion = filtradas.filter(
+  (d) =>
+    d.location &&
+    typeof d.location.lat === "number" &&
+    typeof d.location.lng === "number"
+);
+
+
 
   return (
     <div className="bg-[#f5efe7] min-h-screen w-full">
@@ -284,8 +300,14 @@ const MapaDonantes = () => {
                       </span>
                     </div>
 
-<Link
-  to={`/donation/${d.id}`}
+<button
+  onClick={() => {
+    if (!user) {
+      navigate("/login");  // ⛔ NO logueado → login
+    } else {
+      navigate(`/donation/${d.id}`); // ✔ Logueado → ver detalles
+    }
+  }}
   style={{
     display: "block",
     marginTop: "14px",
@@ -295,11 +317,14 @@ const MapaDonantes = () => {
     borderRadius: "10px",
     color: "white",
     fontWeight: "600",
-    textDecoration: "none",
+    width: "100%",
+    border: "none",
+    cursor: "pointer",
   }}
 >
   Ver Detalles
-</Link>
+</button>
+
 
                   </div>
                 </Popup>

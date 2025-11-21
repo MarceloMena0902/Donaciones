@@ -11,13 +11,12 @@ import {
 } from "firebase/database";
 import { getFirestore } from "firebase/firestore"; 
 const firebaseConfig = {
-  apiKey: "AIzaSyCRRbqkr9AVNPJkb79GfdDcT6gGdQtu2uE",
-  authDomain: "donaciones-e6a4f.firebaseapp.com",
-  databaseURL: "https://donaciones-e6a4f-default-rtdb.firebaseio.com",
-  projectId: "donaciones-e6a4f",
-  storageBucket: "donaciones-e6a4f.appspot.com",
-  messagingSenderId: "46587410770",
-  appId: "1:46587410770:web:640ca308e4dfb2d0da28b",
+  apiKey: "AIzaSyCPvr-xCDu92lYvmqLNXLC_fDHk1HQjb-E",
+  authDomain: "cochabambacomparte.firebaseapp.com",
+  projectId: "cochabambacomparte",
+  storageBucket: "cochabambacomparte.firebasestorage.app",
+  messagingSenderId: "631789862214",
+  appId: "1:631789862214:web:f6fe75438b492d68be7947"
 };
 
 const app = initializeApp(firebaseConfig);

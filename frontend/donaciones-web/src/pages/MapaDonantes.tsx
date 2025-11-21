@@ -17,6 +17,7 @@ import { Link, useNavigate } from "react-router-dom";
 
 const API_URL = "http://localhost:4000/api/donations";
 
+
 const getMarkerColor = (estado: string) => {
   switch (estado) {
     case "Disponible":
@@ -42,6 +43,7 @@ const MapaDonantes = () => {
   const [donations, setDonations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [categoria, setCategoria] = useState("Todos");
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
   const { user } = useAuth();
 const navigate = useNavigate();
   // ⭐ Donaciones estáticas para pruebas
@@ -108,28 +110,36 @@ const navigate = useNavigate();
 
 
   // ⭐ FILTRO REAL PARA OCULTAR VENCIDAS
-//   const isExpired = (expirationDate: string) => {
-//   if (!expirationDate) return false; // si no hay fecha explícita, no se considera vencido
-//   const today = new Date();
-//   const exp = new Date(expirationDate);
-//   return exp < today; // vencido si la fecha es menor a hoy
-// };
+   const isExpired = (expirationDate: string) => {
+   if (!expirationDate) return false; // si no hay fecha explícita, no se considera vencido
+   const today = new Date();
+   const exp = new Date(expirationDate);
+   return exp < today; // vencido si la fecha es menor a hoy
+ };
 
-//   const donacionesConUbicacion = filtradas.filter(
+   const donacionesConUbicacion = filtradas.filter(
+   (d) =>
+     d.location &&
+     typeof d.location.lat === "number" &&
+     typeof d.location.lng === "number" &&
+     !isExpired(d.expirationDate) // 👈 NO mostrar vencidas
+ );
+// const donacionesConUbicacion = filtradas.filter(
 //   (d) =>
 //     d.location &&
 //     typeof d.location.lat === "number" &&
-//     typeof d.location.lng === "number" &&
-//     !isExpired(d.expirationDate) // 👈 NO mostrar vencidas
+//     typeof d.location.lng === "number"
 // );
-const donacionesConUbicacion = filtradas.filter(
-  (d) =>
-    d.location &&
-    typeof d.location.lat === "number" &&
-    typeof d.location.lng === "number"
-);
 
+const nextImage = (images: string[]) => {
+  setActiveImageIndex((prev) => (prev + 1) % images.length);
+};
 
+const prevImage = (images: string[]) => {
+  setActiveImageIndex((prev) =>
+    prev === 0 ? images.length - 1 : prev - 1
+  );
+};
 
   return (
     <div className="bg-[#f5efe7] min-h-screen w-full">
@@ -138,11 +148,11 @@ const donacionesConUbicacion = filtradas.filter(
       <div className="pt-6 px-10">
 
         {/* HEADER */}
-        <div className="bg-white p-10 rounded-3xl shadow-xl border border-[#e4d7c5] mb-10 relative overflow-hidden">
+        <div className="bg-white p-5 md:p-8 lg:p-10 rounded-3xl shadow-xl border border-[#e4d7c5] mb-10 relative overflow-hidden">
           <div className="absolute top-0 left-0 w-[92%] h-1 mx-auto 
             bg-gradient-to-r from-[#826c43] to-[#e66748] rounded-t-3xl" />
 
-          <h1 className="text-5xl font-extrabold bg-gradient-to-r from-[#826c43] to-[#e66748] 
+          <h1 className="text-3xl md:text-4xl lg:text-5xl font-extrabold bg-gradient-to-r from-[#826c43] to-[#e66748] 
             bg-clip-text text-transparent flex items-center gap-3">
             <MapPin size={45} /> Mapa de Donantes
           </h1>
@@ -214,7 +224,7 @@ const donacionesConUbicacion = filtradas.filter(
             center={[-17.3895, -66.1568]}
             zoom={12}
             zoomControl={false}
-            className="h-[700px] w-full"
+            className="w-full h-[450px] md:h-[600px] lg:h-[700px]"
           >
             <CenterCochabamba />
 
@@ -244,7 +254,7 @@ const donacionesConUbicacion = filtradas.filter(
               >
                 <Popup>
                   <div style={{
-                    width: "260px",
+                    width: "min(260px, 80vw)",
                     background: "#fff8f0",
                     borderRadius: "18px",
                     padding: "14px",
@@ -265,6 +275,75 @@ const donacionesConUbicacion = filtradas.filter(
                     }}>
                       {d.description}
                     </div>
+                    {d.images && d.images.length > 0 && (
+                      <div
+                        style={{
+                          width: "100%",
+                          height: "120px",
+                          maxHeight: "35vw",
+                          borderRadius: "12px",
+                          overflow: "hidden",
+                          position: "relative",
+                          marginBottom: "12px",
+                          display: "flex",
+                          justifyContent: "center",
+                          alignItems: "center",
+                        }}
+                      >
+                        {/* Imagen actual */}
+                        <img
+                          src={d.images[activeImageIndex]}
+                          alt="donacion"
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            objectFit: "cover",
+                          }}
+                        />
+
+                        {/* Flecha izquierda */}
+                        <button
+                          onClick={() => prevImage(d.images)}
+                          style={{
+                            position: "absolute",
+                            left: "5px",
+                            top: "50%",
+                            transform: "translateY(-50%)",
+                            background: "rgba(0,0,0,0.45)",
+                            color: "white",
+                            border: "none",
+                            width: "28px",
+                            height: "28px",
+                            borderRadius: "50%",
+                            cursor: "pointer",
+                            fontSize: "16px",
+                          }}
+                        >
+                          ‹
+                        </button>
+
+                        {/* Flecha derecha */}
+                        <button
+                          onClick={() => nextImage(d.images)}
+                          style={{
+                            position: "absolute",
+                            right: "5px",
+                            top: "50%",
+                            transform: "translateY(-50%)",
+                            background: "rgba(0,0,0,0.45)",
+                            color: "white",
+                            border: "none",
+                            width: "28px",
+                            height: "28px",
+                            borderRadius: "50%",
+                            cursor: "pointer",
+                            fontSize: "16px",
+                          }}
+                        >
+                          ›
+                        </button>
+                      </div>
+                    )}
 
                     <p style={{ margin: "6px 0", color: "#4b3f2f", fontSize: "14px" }}>
                       <Calendar size={14} className="inline mr-1 text-[#826c43]" />

@@ -13,7 +13,8 @@ import axios from "axios";
 import { useEffect, useState } from "react";
 import { useAuth } from "../context/AuthContext";
 import Swal from "sweetalert2";
-
+import { doc, getDoc } from "firebase/firestore";
+import { firestoreDb } from "../firebaseConfig";
 
 const API_URL = "http://localhost:4000/api/donations";
 const USERS_API = "http://localhost:4000/api/users";
@@ -26,9 +27,12 @@ const DonationView = () => {
   const [donorData, setDonorData] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [donaciones, setDonaciones] = useState<any[]>([]);
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+
   // ⭐ MODALES
   const [showPreChat, setShowPreChat] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [existingChatId, setExistingChatId] = useState<string | null>(null);
 
   // ⭐ Mensaje seleccionado
   const [selectedMessage, setSelectedMessage] = useState("");
@@ -39,7 +43,16 @@ const DonationView = () => {
     "¿Está aún disponible esta donación?",
     "¿Podemos coordinar la entrega?",
   ];
+  const nextImage = (images: string[]) => {
+  setActiveImageIndex((prev) => (prev + 1) % images.length);
+};
 
+
+const prevImage = (images: string[]) => {
+  setActiveImageIndex((prev) =>
+    prev === 0 ? images.length - 1 : prev - 1
+  );
+};
   // ⭐ Donaciones estáticas
   const staticDonations = [
     {
@@ -117,7 +130,26 @@ const DonationView = () => {
   loadUser();
 }, [donation]);
 
- 
+ useEffect(() => {
+  if (!donation || !user) return;
+
+  // Si la donación es del mismo usuario, no buscamos chat
+  if (donation.userId === user.uid) return;
+
+  const checkExistingChat = async () => {
+    const chatId = `${donation.id}_${user.uid}_${donation.userId}`;
+    const chatRef = doc(firestoreDb, "chats", chatId);
+    const snap = await getDoc(chatRef);
+
+    if (snap.exists()) {
+      setExistingChatId(chatId);
+    } else {
+      setExistingChatId(null);
+    }
+  };
+
+  checkExistingChat();
+}, [donation, user]);
 
   // =========================
   // SOLO FRONTEND — no manda nada al backend
@@ -151,7 +183,7 @@ const sendRequestToBackend = async () => {
   }
 
   try {
-    // 1️⃣ Guardar solicitud
+    // 1️ Guardar solicitud
     await axios.post("http://localhost:4000/api/requests", {
       donationId: donation.id,
       donorId: donation.userId,
@@ -159,7 +191,7 @@ const sendRequestToBackend = async () => {
       message: selectedMessage
     });
 
-    // 2️⃣ Guardar mensaje
+    // 2️ Guardar mensaje
     const chatId = `${user.uid}_${donation.userId}_${donation.id}`;
     await axios.post("http://localhost:4000/api/messages", {
       chatId,
@@ -172,6 +204,7 @@ const sendRequestToBackend = async () => {
   type: "solicitud",                // ✔ necesario para abrir modal
   requesterId: user.uid,            // quién envió la solicitud
   donationId: donation.id,          // qué donación
+  description: donation.description, 
   preview: selectedMessage,         // ✔ mensaje REAL que envió
   content: `${user.displayName || "Un usuario"} quiere contactar sobre tu donación`,
 });
@@ -364,37 +397,132 @@ const sendRequestToBackend = async () => {
                 )}
 
                 <p>
-                  <strong>Estado:</strong>{" "}
+                  <strong>Estado:</strong>{" "}                  
                   <span className="px-3 py-1 rounded-full bg-green-100 text-green-700 font-semibold">
                     {donation.status}
                   </span>
                 </p>
+                {donation.images && donation.images.length > 0 && (
+                <div
+                  style={{
+                    width: "100%",
+                    height: "200px",
+                    borderRadius: "12px",
+                    overflow: "hidden",
+                    position: "relative",
+                    marginTop: "16px",
+                    display: "flex",
+                    justifyContent: "center",
+                    alignItems: "center",
+                    border: "1px solid #e4d7c5",
+                    background: "#fff8f0",
+                  }}
+                >
+                  {/* Imagen actual */}
+                  <img
+                    src={donation.images[activeImageIndex]}
+                    alt="donacion"
+                    style={{
+                      width: "100%",
+                      height: "100%",
+                      objectFit: "cover",
+                    }}
+                  />
+
+                  {/* Flecha izquierda */}
+                  <button
+                    onClick={() => prevImage(donation.images)}
+                    style={{
+                      position: "absolute",
+                      left: "6px",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "rgba(0,0,0,0.45)",
+                      color: "white",
+                      border: "none",
+                      width: "32px",
+                      height: "32px",
+                      borderRadius: "50%",
+                      cursor: "pointer",
+                      fontSize: "18px",
+                    }}
+                  >
+                    ‹
+                  </button>
+
+                  {/* Flecha derecha */}
+                  <button
+                    onClick={() => nextImage(donation.images)}
+                    style={{
+                      position: "absolute",
+                      right: "6px",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      background: "rgba(0,0,0,0.45)",
+                      color: "white",
+                      border: "none",
+                      width: "32px",
+                      height: "32px",
+                      borderRadius: "50%",
+                      cursor: "pointer",
+                      fontSize: "18px",
+                    }}
+                  >
+                    ›
+                  </button>
+                </div>
+              )}
+
               </div>
             </div>
           </div>
 
           {/* BOTONES */}
           <div className="mt-12 flex gap-4">
-            {donation.userId !== user?.uid && (
+            {/* Si la donación es del usuario → solo VOLVER */}
+            {donation.userId === user?.uid ? (
               <button
-                onClick={() => setShowPreChat(true)}
-                className="bg-gradient-to-r from-[#826c43] to-[#e66748] 
-                  text-white px-6 py-3 rounded-xl shadow hover:scale-105 transition flex items-center gap-2"
+                onClick={() => navigate(-1)}
+                className="px-6 py-3 rounded-xl border border-[#826c43] text-[#826c43] 
+                  font-semibold hover:bg-[#f7efe5] transition-all"
               >
-                <i className="fas fa-comments"></i>
-                Contactar al Donante
+                Volver
               </button>
+            ) : (
+              <>
+                {/* Si YA EXISTE un chat → Ir al chat */}
+                {existingChatId ? (
+                  <button
+                    onClick={() => navigate(`/chat/${existingChatId}`)}
+                    className="bg-gradient-to-r from-[#826c43] to-[#e66748] 
+                      text-white px-6 py-3 rounded-xl shadow hover:scale-105 transition flex items-center gap-2"
+                  >
+                    <i className="fas fa-comments"></i>
+                    Ir al Chat
+                  </button>
+                ) : (
+                  /* Si NO existe chat → Contactar al Donante */
+                  <button
+                    onClick={() => setShowPreChat(true)}
+                    className="bg-gradient-to-r from-[#826c43] to-[#e66748] 
+                      text-white px-6 py-3 rounded-xl shadow hover:scale-105 transition flex items-center gap-2"
+                  >
+                    <i className="fas fa-comments"></i>
+                    Contactar al Donante
+                  </button>
+                )}
+
+                <button
+                  onClick={() => navigate(-1)}
+                  className="px-6 py-3 rounded-xl border border-[#826c43] text-[#826c43] 
+                    font-semibold hover:bg-[#f7efe5] transition-all"
+                >
+                  Volver
+                </button>
+              </>
             )}
-
-
-            <button
-              onClick={() => navigate(-1)}
-              className="px-6 py-3 rounded-xl border border-[#826c43] text-[#826c43] 
-                font-semibold hover:bg-[#f7efe5] transition-all"
-            >
-              Volver
-            </button>
           </div>
+
         </div>
       </div>
     </div>

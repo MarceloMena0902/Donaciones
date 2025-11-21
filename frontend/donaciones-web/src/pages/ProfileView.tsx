@@ -4,6 +4,12 @@ import { Edit3, Save, Camera, Lock, X } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 import axios from "axios";
 import Swal from "sweetalert2";
+import {
+  getAuth,
+  updatePassword,
+  reauthenticateWithCredential,
+  EmailAuthProvider,
+} from "firebase/auth";
 
 const API_URL = "http://localhost:4000/api/users";
 
@@ -11,11 +17,9 @@ const ProfileView = () => {
   const { user, loading } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
 
-  // =====================================================
-  // 🔥 TODOS LOS HOOKS VAN AQUÍ ARRIBA (ANTES DE LOS RETURN)
-  // =====================================================
-
   const [profile, setProfile] = useState<any | null>(null);
+  const [originalProfile, setOriginalProfile] = useState<any | null>(null);
+
   const [editing, setEditing] = useState(false);
   const [showPassModal, setShowPassModal] = useState(false);
 
@@ -25,10 +29,16 @@ const ProfileView = () => {
     confirmPass: "",
   });
 
+  const [errors, setErrors] = useState({
+    name: "",
+    phone: "",
+    address: "",
+  });
+
   const [newAvatarFile, setNewAvatarFile] = useState<File | null>(null);
 
   // =====================================================
-  // 🔥 1. Cargar datos completos desde tu backend
+  // 🔥 CARGAR PERFIL DESDE BACKEND
   // =====================================================
   useEffect(() => {
     const loadUser = async () => {
@@ -37,7 +47,7 @@ const ProfileView = () => {
       try {
         const res = await axios.get(`${API_URL}/${user.uid}`);
 
-        setProfile({
+        const info = {
           name: res.data.name,
           email: res.data.email,
           phone: res.data.phone || "",
@@ -46,7 +56,10 @@ const ProfileView = () => {
             res.data.photoUrl ||
             user.photoURL ||
             "https://cdn-icons-png.flaticon.com/512/149/149071.png",
-        });
+        };
+
+        setProfile(info);
+        setOriginalProfile(info);
       } catch (err) {
         console.log("❌ Error cargando perfil:", err);
       }
@@ -54,10 +67,6 @@ const ProfileView = () => {
 
     loadUser();
   }, [user]);
-
-  // =====================================================
-  // ⏳ LOADING / NO USER
-  // =====================================================
 
   if (loading || !profile) {
     return (
@@ -67,16 +76,75 @@ const ProfileView = () => {
     );
   }
 
-  if (!user) {
-    return (
-      <div className="min-h-screen flex justify-center items-center text-xl">
-        No has iniciado sesión.
-      </div>
-    );
-  }
+  // =====================================================
+  // 🔥 VALIDACIONES
+  // =====================================================
+
+  const validateName = (value: string) => {
+    let error = "";
+
+    if (value.length < 3) error = "Debe tener al menos 3 caracteres";
+    if (value.length > 40) error = "No puede tener más de 40 caracteres";
+    if (!/^[A-Za-zÁÉÍÓÚáéíóúñÑ ]+$/.test(value))
+      error = "Solo se permiten letras y espacios";
+
+    setErrors((prev) => ({ ...prev, name: error }));
+  };
+
+  const validatePhone = (value: string) => {
+    let error = "";
+
+    if (!/^\d+$/.test(value)) error = "Solo números";
+    if (value.length !== 8) error = "Debe tener 8 dígitos";
+
+    setErrors((prev) => ({ ...prev, phone: error }));
+  };
+
+  const validateAddress = (value: string) => {
+    let error = "";
+
+    if (value.length < 3) error = "Debe tener al menos 3 caracteres";
+    if (value.length > 60) error = "No puede exceder 60 caracteres";
+
+    setErrors((prev) => ({ ...prev, address: error }));
+  };
 
   // =====================================================
-  // 🔥 2. Cambiar avatar (solo preview)
+  // 🔥 CONTROL DE INPUTS
+  // =====================================================
+
+  const handleNameChange = (e: any) => {
+    let value = e.target.value;
+
+    value = value.replace(/\s+/g, " ");
+    value = value.replace(/^\s+/, "");
+    value = value.replace(/\s+$/, "");
+
+    validateName(value);
+    setProfile((prev: any) => ({ ...prev, name: value }));
+  };
+
+  const handlePhoneChange = (e: any) => {
+    let value = e.target.value.replace(/\D/g, "");
+    value = value.slice(0, 8);
+
+    validatePhone(value);
+    setProfile((prev: any) => ({ ...prev, phone: value }));
+  };
+
+  const handleAddressChange = (e: any) => {
+    let value = e.target.value;
+
+    value = value.replace(/\s+/g, " ");
+    value = value.replace(/^\s+/, "");
+    value = value.replace(/\s+$/, "");
+
+    validateAddress(value);
+    setProfile((prev: any) => ({ ...prev, address: value }));
+  };
+
+  // =====================================================
+  // 🔥 AVATAR (PREVIEW)
   // =====================================================
   const handlePhoto = (e: any) => {
     const file = e.target.files[0];
@@ -85,22 +153,21 @@ const ProfileView = () => {
     setNewAvatarFile(file);
     const preview = URL.createObjectURL(file);
 
-    setProfile((prev: any) => ({
-      ...prev,
-      avatar: preview,
-    }));
+    setProfile((prev: any) => ({ ...prev, avatar: preview }));
   };
 
   // =====================================================
-  // 🔥 3. Guardar perfil en el backend
+  // 🔥 GUARDAR CAMBIOS
   // =====================================================
   const saveProfile = async () => {
-    if (!user || !profile) return;
+    if (errors.name || errors.phone || errors.address) {
+      Swal.fire("Error", "Corrige los campos inválidos", "error");
+      return;
+    }
 
     try {
       let photoUrl = profile.avatar;
 
-      // Subir foto a Cloudinary si se seleccionó una nueva
       if (newAvatarFile) {
         const formData = new FormData();
         formData.append("image", newAvatarFile);
@@ -114,7 +181,7 @@ const ProfileView = () => {
         photoUrl = uploadRes.data.url;
       }
 
-      await axios.put(`${API_URL}/${user.uid}`, {
+      await axios.put(`${API_URL}/${user!.uid}`, {
         name: profile.name,
         phone: profile.phone,
         address: profile.address,
@@ -128,6 +195,7 @@ const ProfileView = () => {
         showConfirmButton: false,
       });
 
+      setOriginalProfile(profile);
       setEditing(false);
     } catch (err) {
       console.log("❌ Error al actualizar perfil:", err);
@@ -136,29 +204,59 @@ const ProfileView = () => {
   };
 
   // =====================================================
-  // 🔥 4. Guardar nueva contraseña
+  // 🔥 CANCELAR EDICIÓN
   // =====================================================
-  const handlePasswordChange = () => {
-    if (passwordData.newPass !== passwordData.confirmPass) {
-      Swal.fire("Error", "Las contraseñas no coinciden", "error");
-      return;
-    }
-
-    Swal.fire("Listo", "Contraseña actualizada (pendiente backend)", "success");
-    setShowPassModal(false);
+  const cancelEditing = () => {
+    setProfile(originalProfile);
+    setErrors({ name: "", phone: "", address: "" });
+    setEditing(false);
+    setNewAvatarFile(null);
   };
 
   // =====================================================
-  // 🎨 UI COMPLETA (sin cambios)
+  // 🔥 CAMBIO DE CONTRASEÑA FIREBASE
+  // =====================================================
+  const handlePasswordChange = async () => {
+    const auth = getAuth();
+    const currentUser = auth.currentUser;
+
+    if (!currentUser) return Swal.fire("Error", "No estás autenticado", "error");
+
+    if (passwordData.newPass !== passwordData.confirmPass) {
+      return Swal.fire("Error", "Las contraseñas no coinciden", "error");
+    }
+
+    try {
+      const credential = EmailAuthProvider.credential(
+        profile.email,
+        passwordData.oldPass
+      );
+
+      await reauthenticateWithCredential(currentUser, credential);
+      await updatePassword(currentUser, passwordData.newPass);
+
+      Swal.fire({
+        icon: "success",
+        title: "Contraseña actualizada",
+        timer: 1500,
+        showConfirmButton: false,
+      });
+
+      setShowPassModal(false);
+    } catch (error) {
+      Swal.fire("Error", "Contraseña actual incorrecta", "error");
+    }
+  };
+
+  // =====================================================
+  // 🔥 UI
   // =====================================================
   return (
     <div className="min-h-screen bg-[#f5efe7] pb-20 relative">
       <NavbarLogged />
 
       <div className="pt-24 max-w-4xl mx-auto px-6">
-
-        {/* CARD PRINCIPAL */}
-        <div className="bg-white rounded-3xl shadow-xl p-10 border border-[#e4d7c5] relative">
+        <div className="bg-white rounded-3xl shadow-xl p-10 border relative">
           <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#826c43] to-[#e66748]" />
 
           {/* FOTO */}
@@ -172,7 +270,7 @@ const ProfileView = () => {
               {editing && (
                 <button
                   onClick={() => fileRef.current?.click()}
-                  className="absolute bottom-2 right-2 bg-[#826c43] hover:bg-[#e66748] text-white p-2 rounded-full shadow"
+                  className="absolute bottom-2 right-2 bg-[#826c43] text-white p-2 rounded-full shadow hover:bg-[#e66748]"
                 >
                   <Camera size={18} />
                 </button>
@@ -199,17 +297,27 @@ const ProfileView = () => {
                 <Edit3 size={18} /> Editar Perfil
               </button>
             ) : (
-              <button
-                onClick={saveProfile}
-                className="mt-4 flex items-center gap-2 px-6 py-2 rounded-xl bg-gradient-to-r from-[#826c43] to-[#e66748] text-white shadow hover:scale-105 transition"
-              >
-                <Save size={18} /> Guardar Cambios
-              </button>
+              <div className="flex gap-4 mt-4">
+                <button
+                  onClick={saveProfile}
+                  className="flex items-center gap-2 px-6 py-2 rounded-xl bg-gradient-to-r from-[#826c43] to-[#e66748] text-white shadow hover:scale-105"
+                >
+                  <Save size={18} /> Guardar
+                </button>
+
+                <button
+                  onClick={cancelEditing}
+                  className="flex items-center gap-2 px-6 py-2 rounded-xl border border-[#826c43] text-[#826c43] hover:bg-[#f0e6d8]"
+                >
+                  Cancelar
+                </button>
+              </div>
             )}
           </div>
 
           {/* CAMPOS */}
           <div className="mt-10 space-y-6">
+
             {/* Nombre */}
             <div>
               <p className="font-semibold text-gray-700 mb-1">Nombre completo</p>
@@ -217,13 +325,12 @@ const ProfileView = () => {
                 type="text"
                 disabled={!editing}
                 value={profile.name}
-                onChange={(e) =>
-                  setProfile((prev: any) => ({ ...prev, name: e.target.value }))
-                }
+                onChange={handleNameChange}
                 className={`w-full px-4 py-3 rounded-xl border ${
                   editing ? "bg-white border-[#e4d7c5]" : "bg-[#faf6f1]"
                 } shadow-sm`}
               />
+              {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
             </div>
 
             {/* Email */}
@@ -233,7 +340,8 @@ const ProfileView = () => {
                 type="email"
                 disabled
                 value={profile.email}
-                className="w-full px-4 py-3 rounded-xl border bg-[#faf6f1] text-gray-600 shadow-sm"
+                readOnly
+                className="w-full px-4 py-3 rounded-xl border bg-[#faf6f1] text-gray-600 shadow-sm cursor-not-allowed"
               />
             </div>
 
@@ -244,13 +352,12 @@ const ProfileView = () => {
                 type="text"
                 disabled={!editing}
                 value={profile.phone}
-                onChange={(e) =>
-                  setProfile((prev: any) => ({ ...prev, phone: e.target.value }))
-                }
+                onChange={handlePhoneChange}
                 className={`w-full px-4 py-3 rounded-xl border ${
                   editing ? "bg-white border-[#e4d7c5]" : "bg-[#faf6f1]"
                 } shadow-sm`}
               />
+              {errors.phone && <p className="text-red-500 text-sm mt-1">{errors.phone}</p>}
             </div>
 
             {/* Dirección */}
@@ -260,13 +367,14 @@ const ProfileView = () => {
                 type="text"
                 disabled={!editing}
                 value={profile.address}
-                onChange={(e) =>
-                  setProfile((prev: any) => ({ ...prev, address: e.target.value }))
-                }
+                onChange={handleAddressChange}
                 className={`w-full px-4 py-3 rounded-xl border ${
                   editing ? "bg-white border-[#e4d7c5]" : "bg-[#faf6f1]"
                 } shadow-sm`}
               />
+              {errors.address && (
+                <p className="text-red-500 text-sm mt-1">{errors.address}</p>
+              )}
             </div>
           </div>
 
@@ -289,7 +397,7 @@ const ProfileView = () => {
           onClick={() => setShowPassModal(false)}
         >
           <div
-            className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-8 border border-[#e4d7c5] relative"
+            className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-8 border relative"
             onClick={(e) => e.stopPropagation()}
           >
             <button
@@ -308,10 +416,7 @@ const ProfileView = () => {
                 type="password"
                 placeholder="Contraseña actual"
                 onChange={(e) =>
-                  setPasswordData((prev) => ({
-                    ...prev,
-                    oldPass: e.target.value,
-                  }))
+                  setPasswordData((prev) => ({ ...prev, oldPass: e.target.value }))
                 }
                 className="w-full px-4 py-3 rounded-xl border border-[#e4d7c5] shadow-sm"
               />
@@ -320,10 +425,7 @@ const ProfileView = () => {
                 type="password"
                 placeholder="Nueva contraseña"
                 onChange={(e) =>
-                  setPasswordData((prev) => ({
-                    ...prev,
-                    newPass: e.target.value,
-                  }))
+                  setPasswordData((prev) => ({ ...prev, newPass: e.target.value }))
                 }
                 className="w-full px-4 py-3 rounded-xl border border-[#e4d7c5] shadow-sm"
               />

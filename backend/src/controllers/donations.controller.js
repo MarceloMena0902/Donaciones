@@ -1,6 +1,9 @@
 import { db } from "../config/firebase.js";
+import admin from "firebase-admin";
 
-// Crear donación
+// ======================================================
+// CREAR DONACIÓN (optimizado para registrar el ID en users/{uid})
+// ======================================================
 export const createDonation = async (req, res) => {
   try {
     const {
@@ -15,9 +18,12 @@ export const createDonation = async (req, res) => {
     } = req.body;
 
     if (!userId || !type || !description || !quantity || !unit) {
-      return res.status(400).json({ error: "Faltan datos obligatorios para la donación." });
+      return res.status(400).json({
+        error: "Faltan datos obligatorios para la donación."
+      });
     }
 
+    // 1) Crear donación
     const donationRef = await db.collection("donations").add({
       userId,
       type,
@@ -27,18 +33,32 @@ export const createDonation = async (req, res) => {
       location: location || null,
       expirationDate: expirationDate || null,
       status: "Disponible",
-      images: images || [],  // 🔥 NUEVO
+      images: images || [],
       createdAt: new Date(),
       updatedAt: new Date(),
     });
 
-    res.status(201).json({ id: donationRef.id, message: "Donación registrada correctamente." });
+    // 2) Guardar ID de donación también en users/{uid}
+    await db.collection("users").doc(userId).set(
+      {
+        donations: admin.firestore.FieldValue.arrayUnion(donationRef.id),
+      },
+      { merge: true }
+    );
+
+    res.status(201).json({
+      id: donationRef.id,
+      message: "Donación registrada correctamente."
+    });
+
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-// Obtener todas las donaciones
+// ======================================================
+// OBTENER TODAS LAS DONACIONES
+// ======================================================
 export const getDonations = async (req, res) => {
   try {
     const snapshot = await db.collection("donations").get();
@@ -53,23 +73,28 @@ export const getDonations = async (req, res) => {
   }
 };
 
-// Obtener donación por ID
+// ======================================================
+// OBTENER DONACIÓN POR ID
+// ======================================================
 export const getDonationById = async (req, res) => {
   try {
     const { id } = req.params;
-    const doc = await db.collection("donations").doc(id).get();
+    const docSnap = await db.collection("donations").doc(id).get();
 
-    if (!doc.exists) {
+    if (!docSnap.exists) {
       return res.status(404).json({ error: "Donación no encontrada." });
     }
 
-    res.status(200).json({ id: doc.id, ...doc.data() });
+    res.status(200).json({ id: docSnap.id, ...docSnap.data() });
+
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-// Actualizar donación
+// ======================================================
+// ACTUALIZAR DONACIÓN
+// ======================================================
 export const updateDonation = async (req, res) => {
   try {
     const { id } = req.params;
@@ -85,9 +110,9 @@ export const updateDonation = async (req, res) => {
     } = req.body;
 
     const donationRef = db.collection("donations").doc(id);
-    const doc = await donationRef.get();
+    const docSnap = await donationRef.get();
 
-    if (!doc.exists) {
+    if (!docSnap.exists) {
       return res.status(404).json({ error: "Donación no encontrada." });
     }
 
@@ -99,50 +124,88 @@ export const updateDonation = async (req, res) => {
       location,
       expirationDate,
       status,
-      images,          // 🔥 URLs finales enviadas desde el front
+      images,
       updatedAt: new Date(),
     });
 
+    res.status(200).json({
+      message: "Donación actualizada correctamente."
+    });
 
-    res.status(200).json({ message: "Donación actualizada correctamente." });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
 
-// Eliminar donación
+// ======================================================
+// ELIMINAR DONACIÓN
+// ======================================================
 export const deleteDonation = async (req, res) => {
   try {
     const { id } = req.params;
-    const donationRef = db.collection("donations").doc(id);
 
-    await donationRef.delete();
+    await db.collection("donations").doc(id).delete();
 
-    res.status(200).json({ message: "Donación eliminada correctamente." });
+    res.status(200).json({
+      message: "Donación eliminada correctamente."
+    });
+
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
-// Obtener donaciones por ID de usuario
+
+// ======================================================
+// 🔥 GET DONATIONS BY USER — ULTRA OPTIMIZADO
+// ======================================================
 export const getDonationsByUser = async (req, res) => {
   try {
     const { userId } = req.params;
 
     if (!userId) {
-      return res.status(400).json({ error: "Faltan parámetros: userId es obligatorio." });
+      return res.status(400).json({
+        error: "Faltan parámetros: userId es obligatorio."
+      });
     }
 
-    const snapshot = await db
-      .collection("donations")
-      .where("userId", "==", userId)
-      .get();
+    // 1️⃣ Leer SOLO el usuario (1 lectura)
+    const userSnap = await db.collection("users").doc(userId).get();
 
-    const donations = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
+    if (!userSnap.exists) {
+      return res.status(404).json({ error: "Usuario no encontrado." });
+    }
 
-    res.status(200).json(donations);
+    const donationIds = userSnap.data().donations || [];
+
+    if (donationIds.length === 0) {
+      return res.status(200).json([]);
+    }
+
+    // 2️⃣ Firestore solo permite "in" con máximo 10 IDs
+    const chunks = [];
+    for (let i = 0; i < donationIds.length; i += 10) {
+      chunks.push(donationIds.slice(i, i + 10));
+    }
+
+    const results = [];
+
+    // 3️⃣ Hacer consultas por bloques de 10
+    for (const chunk of chunks) {
+      const snap = await db
+        .collection("donations")
+        .where(admin.firestore.FieldPath.documentId(), "in", chunk)
+        .get();
+
+      snap.forEach(doc => {
+        results.push({
+          id: doc.id,
+          ...doc.data(),
+        });
+      });
+    }
+
+    res.status(200).json(results);
+
   } catch (error) {
     console.log("❌ ERROR en getDonationsByUser:", error);
     res.status(500).json({ error: error.message });

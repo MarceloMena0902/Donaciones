@@ -11,7 +11,7 @@ const serviceAccount = JSON.parse(
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
-    databaseURL: "https://donaciones-e6a4f-default-rtdb.firebaseio.com",
+    databaseURL: "https://cochabambacomparte-default-rtdb.firebaseio.com",
   });
 }
 

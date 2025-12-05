@@ -161,44 +161,99 @@ const EditDonation = () => {
     return urls;
   };
 
-  // ============================================================
-  // 5) Guardar cambios (UPDATE DONATION)
-  // ============================================================
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form) return;
+// ============================================================
+// 5) Guardar cambios (UPDATE DONATION) + VALIDACIONES UNIFICADAS
+// ============================================================
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  if (!form) return;
 
-    try {
-      // 🔥 Subir nuevas imágenes a Cloudinary
-      const uploaded = await uploadNewImages();
+  // ---------------- VALIDACIONES ----------------
+  if (!form.tipo) {
+    return Swal.fire({
+      icon: "error",
+      title: "Tipo inválido",
+      text: "Selecciona un tipo de alimento.",
+      confirmButtonColor: "#e66748",
+    });
+  }
 
-      // 🔥 Crear lista final de imágenes
-      const finalImages = [...existingImages, ...uploaded];
+  if (!form.descripcion.trim()) {
+    return Swal.fire({
+      icon: "error",
+      title: "Descripción vacía",
+      text: "La descripción no puede estar vacía.",
+      confirmButtonColor: "#e66748",
+    });
+  }
 
-      // 🔥 UPDATE DONATION
-      await axios.put(`http://localhost:4000/api/donations/${id}`, {
-        type: form.tipo,
-        description: form.descripcion,
-        quantity: form.cantidad,
-        unit: form.unidad,
-        expirationDate: form.fechaCaducidad,
-        status: form.estado,
-        location: {
-          lat: form.lat,
-          lng: form.lng,
-          address: form.direccion,
-        },
-        images: finalImages,
-      });
+  if (!form.unidad) {
+    return Swal.fire({
+      icon: "error",
+      title: "Unidad requerida",
+      text: "Debes seleccionar una unidad.",
+      confirmButtonColor: "#e66748",
+    });
+  }
 
-      Swal.fire("Éxito", "Donación actualizada correctamente", "success");
-      navigate("/dashboard");
+  if (!form.cantidad || form.cantidad <= 0) {
+    return Swal.fire({
+      icon: "error",
+      title: "Cantidad inválida",
+      text: "La cantidad debe ser mayor que cero.",
+      confirmButtonColor: "#e66748",
+    });
+  }
 
-    } catch (err) {
-      console.log(err);
-      Swal.fire("Error", "No se pudo actualizar la donación.", "error");
-    }
-  };
+  if (!form.lat || !form.lng) {
+    return Swal.fire({
+      icon: "error",
+      title: "Ubicación requerida",
+      text: "Debes seleccionar una ubicación en el mapa.",
+      confirmButtonColor: "#e66748",
+    });
+  }
+
+  // -----------------------------------------------------------
+  try {
+    const uploaded = await uploadNewImages();
+    const finalImages = [...existingImages, ...uploaded];
+
+    await axios.put(`http://localhost:4000/api/donations/${id}`, {
+      type: form.tipo,
+      description: form.descripcion,
+      quantity: form.cantidad,
+      unit: form.unidad,
+      expirationDate: form.fechaCaducidad,
+      status: form.estado,
+      location: {
+        lat: form.lat,
+        lng: form.lng,
+        address: form.direccion,
+      },
+      images: finalImages,
+    });
+
+    Swal.fire({
+      icon: "success",
+      title: "Donación actualizada",
+      text: "Los cambios se guardaron correctamente 🎉",
+      confirmButtonColor: "#826c43",
+    }).then(() => navigate("/dashboard"));
+
+  } catch (err) {
+    console.log(err);
+
+    Swal.fire({
+      icon: "error",
+      title: "Error al actualizar",
+      text: "No se pudo actualizar la donación, intenta nuevamente.",
+      confirmButtonColor: "#e66748",
+    });
+  }
+};
+
+
 
   // ============================================================
   // LOADING

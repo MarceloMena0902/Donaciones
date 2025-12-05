@@ -173,7 +173,7 @@ const ChatList = () => {
                   donorImg={chat.donorPhoto}
                 />
 
-                <p className="text-xl font-semibold">{chat.donationName+" "+" "+ chat.donorName+" "+" "+chat.requesterName}</p>
+                <p className="text-xl font-semibold">{chat.donationName+" / "+ chat.donorName+" / "+chat.requesterName}</p>
 
                 {chat.hasUnread && (
                   <span className="absolute right-4 bg-red-500 text-white text-xs px-3 py-1 rounded-full shadow-md">

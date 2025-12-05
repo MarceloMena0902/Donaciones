@@ -28,6 +28,7 @@ type ChatMessage = {
   id: string;
   senderId: string;
   content: string;
+  imageUrl?: string;
   timestamp: any;
 };
 
@@ -53,6 +54,9 @@ const ChatWindow = () => {
   const [text, setText] = useState("");
   const [activeImageIndex, setActiveImageIndex] = useState(0);
 
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const imageInputRef = useRef<HTMLInputElement | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   const scrollToBottom = () =>
@@ -63,16 +67,6 @@ const ChatWindow = () => {
   // -------------------------------------------------------------
   const [donationId, requesterId, donorId] = chatId.split("_");
   const otherId = user?.uid === requesterId ? donorId : requesterId;
-
-  // -------------------------------------------------------------
-  // Función para saber si un mensaje pertenece al chat actual
-  // -------------------------------------------------------------
-  const isMessageFromCurrentChat = (senderId: string) => {
-    const currentlyInChat = location.pathname === `/chat/${chatId}`;
-    const isSenderOtherPerson = senderId === otherId;
-
-    return currentlyInChat && isSenderOtherPerson;
-  };
 
   // -------------------------------------------------------------
   // Load usuario
@@ -114,7 +108,7 @@ const ChatWindow = () => {
   }, [donationId]);
 
   // -------------------------------------------------------------
-  // Load mensajes + marcar leídos si corresponde
+  // Load mensajes + manejar notificaciones
   // -------------------------------------------------------------
   useEffect(() => {
     if (!chatId || !user?.uid) return;
@@ -133,28 +127,26 @@ const ChatWindow = () => {
       setMessages(arr);
 
       const lastMsg = arr[arr.length - 1];
-
       if (!lastMsg) return;
 
-  const chatRef = doc(firestoreDb, "chats", chatId);
-  const isInChat = location.pathname === `/chat/${chatId}`;
+      const chatRef = doc(firestoreDb, "chats", chatId);
+      const insideChat = location.pathname === `/chat/${chatId}`;
 
-  if (lastMsg.senderId !== user.uid) {
-
-    if (isInChat) {
-      // ❌ No notificar, estoy en su chat
-      await updateDoc(chatRef, {
-        unreadFor: arrayRemove(user.uid),
-      });
-
-    } else {
-      // 🔥 Notificar normalmente
-      await updateDoc(chatRef, {
-        unreadFor: arrayUnion(user.uid),
-      });
-    }
-  }
-});
+      // 🔥 Si el mensaje NO es mío
+      if (lastMsg.senderId !== user.uid) {
+        if (insideChat) {
+          // Estoy viendo el chat → marcar como leído
+          await updateDoc(chatRef, {
+            unreadFor: arrayRemove(user.uid),
+          });
+        } else {
+          // No estoy viendo el chat → generar notificación
+          await updateDoc(chatRef, {
+            unreadFor: arrayUnion(user.uid),
+          });
+        }
+      }
+    });
 
     return unsub;
   }, [chatId, user, location.pathname]);
@@ -167,41 +159,65 @@ const ChatWindow = () => {
   }, [messages]);
 
   // -------------------------------------------------------------
-  // Enviar mensaje
+  // Subir imagen al servidor (Cloudinary a través del backend)
+  // -------------------------------------------------------------
+  const uploadImage = async (file: File): Promise<string | null> => {
+    try {
+      const formData = new FormData();
+      formData.append("image", file);
+
+      const res = await axios.post(
+        "http://localhost:4000/api/donations/upload-image",
+        formData,
+        { headers: { "Content-Type": "multipart/form-data" } }
+      );
+
+      return res.data.url;
+    } catch (err) {
+      console.log("Error subiendo imagen:", err);
+      return null;
+    }
+  };
+
+  // -------------------------------------------------------------
+  // Enviar mensaje (texto o imagen)
   // -------------------------------------------------------------
   const sendMessage = async () => {
-    if (!text.trim() || !user) return;
+    if (!user) return;
 
     const chatRef = doc(firestoreDb, "chats", chatId);
 
-    // Crear mensaje
+    // 🔥 1) Si hay una imagen → enviar solo imagen
+    if (imageFile) {
+      const url = await uploadImage(imageFile);
+      if (url) {
+        await addDoc(collection(firestoreDb, "chats", chatId, "messages"), {
+          senderId: user.uid,
+          content: "",
+          imageUrl: url,
+          timestamp: serverTimestamp(),
+        });
+
+        // ❗ Notificación la maneja el listener
+        await updateDoc(chatRef, { lastActivity: serverTimestamp() });
+      }
+
+      setImageFile(null);
+      return;
+    }
+
+    // 🔥 2) Texto normal
+    if (!text.trim()) return;
+
     await addDoc(collection(firestoreDb, "chats", chatId, "messages"), {
       senderId: user.uid,
       content: text.trim(),
       timestamp: serverTimestamp(),
     });
 
-    // // ✔ Si NO estoy dentro del chat → marcar unread
-    // const isInChatNow = location.pathname === `/chat/${chatId}`;
+    await updateDoc(chatRef, { lastActivity: serverTimestamp() });
 
-    // if (!isInChatNow) {
-    //  await updateDoc(chatRef, {
-    //      unreadFor: arrayUnion(otherId),
-    //    });
-    //  }
-    // await updateDoc(chatRef, { lastActivity: serverTimestamp() });
-await updateDoc(chatRef, {
-      lastActivity: serverTimestamp(),
-      unreadFor: arrayUnion(otherId), // <- vuelve a poner al OTRO como no leído
-    });
     setText("");
-  };
-
-  const handleKeyDown = (e: any) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      sendMessage();
-    }
   };
 
   // -------------------------------------------------------------
@@ -212,7 +228,6 @@ await updateDoc(chatRef, {
       <NavbarLogged />
 
       <div className="pt-24 pb-10 max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-
         {/* PANEL IZQUIERDO */}
         <div className="col-span-1 bg-white rounded-3xl shadow-xl border p-5 flex flex-col gap-5 h-fit">
           <div className="flex items-center gap-3">
@@ -260,11 +275,20 @@ await updateDoc(chatRef, {
               )}
 
               <div className="space-y-2 text-gray-800 text-sm">
-                <p><strong>Descripción:</strong> {donation.description}</p>
-                <p><strong>Cantidad:</strong> {donation.quantity} {donation.unit}</p>
-                <p><strong>Tipo:</strong> {donation.type}</p>
+                <p>
+                  <strong>Descripción:</strong> {donation.description}
+                </p>
+                <p>
+                  <strong>Cantidad:</strong> {donation.quantity}{" "}
+                  {donation.unit}
+                </p>
+                <p>
+                  <strong>Tipo:</strong> {donation.type}
+                </p>
                 {donation.location?.address && (
-                  <p><strong>Ubicación:</strong> {donation.location.address}</p>
+                  <p>
+                    <strong>Ubicación:</strong> {donation.location.address}
+                  </p>
                 )}
               </div>
             </>
@@ -273,8 +297,9 @@ await updateDoc(chatRef, {
 
         {/* PANEL DERECHO */}
         <div className="col-span-1 lg:col-span-2 bg-white rounded-3xl shadow-xl border p-6 flex flex-col h-[75vh]">
-
-          <h2 className="text-xl font-bold mb-3">Conversación con {otherName}</h2>
+          <h2 className="text-xl font-bold mb-3">
+            Conversación con {otherName}
+          </h2>
 
           {/* MENSAJES */}
           <div className="flex-1 overflow-y-auto min-h-0 pr-2 space-y-4">
@@ -282,15 +307,21 @@ await updateDoc(chatRef, {
               const isMine = m.senderId === user?.uid;
 
               const date = m.timestamp?.toDate
-                ? m.timestamp.toDate().toLocaleTimeString("es-BO", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
+                ? m.timestamp
+                    .toDate()
+                    .toLocaleTimeString("es-BO", {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
                 : "";
 
               return (
                 <div key={m.id} className="w-full">
-                  <div className={`flex ${isMine ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className={`flex ${
+                      isMine ? "justify-end" : "justify-start"
+                    }`}
+                  >
                     <div
                       className={`max-w-[75%] p-3 rounded-2xl shadow ${
                         isMine
@@ -298,7 +329,19 @@ await updateDoc(chatRef, {
                           : "bg-[#fff8f0] text-gray-800"
                       }`}
                     >
-                      <p>{m.content}</p>
+                      <>
+                        {/* Imagen */}
+                        {m.imageUrl && (
+                          <img
+                            src={m.imageUrl}
+                            className="w-60 rounded-xl mb-2 shadow-lg border"
+                          />
+                        )}
+
+                        {/* Texto */}
+                        {m.content && <p>{m.content}</p>}
+                      </>
+
                       <p className="text-xs opacity-60 mt-1">{date}</p>
                     </div>
                   </div>
@@ -309,23 +352,82 @@ await updateDoc(chatRef, {
             <div ref={messagesEndRef}></div>
           </div>
 
-          {/* INPUT */}
-          <div className="mt-4 flex items-center gap-3">
+          {/* INPUT + IMAGEN */}
+          <div className="mt-4 flex items-center gap-3 relative">
+            {/* BOTÓN IMAGEN */}
+            <button
+              onClick={() => imageInputRef.current?.click()}
+              className="px-3 py-3 rounded-xl bg-[#f5efe7] border hover:bg-[#e8dfd1] transition shadow"
+            >
+              <img
+                src="https://cdn-icons-png.flaticon.com/512/1829/1829586.png"
+                className="w-6 h-6 opacity-80"
+              />
+            </button>
+
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files?.length) {
+                  setImageFile(e.target.files[0]);
+                }
+              }}
+            />
+
+            {/* INPUT TEXTO — Desactivado si hay imagen */}
             <input
               type="text"
               value={text}
+              disabled={!!imageFile}
               onChange={(e) => setText(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Escribe un mensaje…"
+              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+              placeholder={
+                imageFile ? "Imagen lista para enviar…" : "Escribe un mensaje…"
+              }
               className="flex-1 px-4 py-3 border rounded-xl shadow-sm"
             />
 
+            {/* BOTÓN ENVIAR */}
             <button
               onClick={sendMessage}
               className="px-5 py-3 rounded-xl bg-gradient-to-r from-[#826c43] to-[#e66748] text-white shadow"
             >
               <Send />
             </button>
+
+            {/* PREVISUALIZACIÓN DE IMAGEN */}
+            {imageFile && (
+              <div className="absolute bottom-20 left-0 w-full bg-white p-4 rounded-xl shadow-lg border flex items-center gap-4">
+                <img
+                  src={URL.createObjectURL(imageFile)}
+                  className="w-32 h-32 object-cover rounded-xl border"
+                />
+
+                <div className="flex flex-col gap-2">
+                  <button
+                    onClick={sendMessage}
+                    className="px-4 py-2 bg-green-600 text-white rounded-xl shadow"
+                  >
+                    Enviar imagen
+                  </button>
+
+                  <button
+                    onClick={() => {
+                      setImageFile(null);
+                      if (imageInputRef.current) {
+                        imageInputRef.current.value = ""; // 👈 Permite volver a seleccionar la misma imagen
+                      }
+                    }}
+                    className="px-4 py-2 bg-red-500 text-white rounded-xl shadow"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

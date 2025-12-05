@@ -29,6 +29,8 @@ const ProfileView = () => {
     confirmPass: "",
   });
 
+  const [isOldPassVerified, setIsOldPassVerified] = useState(false);
+
   const [errors, setErrors] = useState({
     name: "",
     phone: "",
@@ -93,19 +95,15 @@ const ProfileView = () => {
 
   const validatePhone = (value: string) => {
     let error = "";
-
     if (!/^\d+$/.test(value)) error = "Solo números";
     if (value.length !== 8) error = "Debe tener 8 dígitos";
-
     setErrors((prev) => ({ ...prev, phone: error }));
   };
 
   const validateAddress = (value: string) => {
     let error = "";
-
     if (value.length < 3) error = "Debe tener al menos 3 caracteres";
     if (value.length > 60) error = "No puede exceder 60 caracteres";
-
     setErrors((prev) => ({ ...prev, address: error }));
   };
 
@@ -115,11 +113,9 @@ const ProfileView = () => {
 
   const handleNameChange = (e: any) => {
     let value = e.target.value;
-
     value = value.replace(/\s+/g, " ");
     value = value.replace(/^\s+/, "");
     value = value.replace(/\s+$/, "");
-
     validateName(value);
     setProfile((prev: any) => ({ ...prev, name: value }));
   };
@@ -127,18 +123,15 @@ const ProfileView = () => {
   const handlePhoneChange = (e: any) => {
     let value = e.target.value.replace(/\D/g, "");
     value = value.slice(0, 8);
-
     validatePhone(value);
     setProfile((prev: any) => ({ ...prev, phone: value }));
   };
 
   const handleAddressChange = (e: any) => {
     let value = e.target.value;
-
     value = value.replace(/\s+/g, " ");
     value = value.replace(/^\s+/, "");
     value = value.replace(/\s+$/, "");
-
     validateAddress(value);
     setProfile((prev: any) => ({ ...prev, address: value }));
   };
@@ -149,10 +142,8 @@ const ProfileView = () => {
   const handlePhoto = (e: any) => {
     const file = e.target.files[0];
     if (!file) return;
-
     setNewAvatarFile(file);
     const preview = URL.createObjectURL(file);
-
     setProfile((prev: any) => ({ ...prev, avatar: preview }));
   };
 
@@ -214,17 +205,14 @@ const ProfileView = () => {
   };
 
   // =====================================================
-  // 🔥 CAMBIO DE CONTRASEÑA FIREBASE
+  // 🔥 VALIDAR CONTRASEÑA ACTUAL
   // =====================================================
-  const handlePasswordChange = async () => {
+  const verifyOldPassword = async () => {
     const auth = getAuth();
     const currentUser = auth.currentUser;
 
-    if (!currentUser) return Swal.fire("Error", "No estás autenticado", "error");
-
-    if (passwordData.newPass !== passwordData.confirmPass) {
-      return Swal.fire("Error", "Las contraseñas no coinciden", "error");
-    }
+    if (!currentUser)
+      return Swal.fire("Error", "No estás autenticado", "error");
 
     try {
       const credential = EmailAuthProvider.credential(
@@ -233,6 +221,39 @@ const ProfileView = () => {
       );
 
       await reauthenticateWithCredential(currentUser, credential);
+
+      Swal.fire({
+        icon: "success",
+        title: "Contraseña verificada",
+        text: "Ahora puedes ingresar una nueva contraseña",
+        timer: 1500,
+        showConfirmButton: false,
+      });
+
+      setIsOldPassVerified(true);
+    } catch (error) {
+      Swal.fire("Error", "La contraseña actual es incorrecta", "error");
+    }
+  };
+
+  // =====================================================
+  // 🔥 CAMBIO DE CONTRASEÑA
+  // =====================================================
+  const handlePasswordChange = async () => {
+    const auth = getAuth();
+    const currentUser = auth.currentUser;
+
+    if (!currentUser)
+      return Swal.fire("Error", "No estás autenticado", "error");
+
+    if (!isOldPassVerified)
+      return Swal.fire("Error", "Debes validar la contraseña actual", "error");
+
+    if (passwordData.newPass !== passwordData.confirmPass) {
+      return Swal.fire("Error", "Las contraseñas no coinciden", "error");
+    }
+
+    try {
       await updatePassword(currentUser, passwordData.newPass);
 
       Swal.fire({
@@ -243,13 +264,16 @@ const ProfileView = () => {
       });
 
       setShowPassModal(false);
+      setIsOldPassVerified(false);
+      setPasswordData({ oldPass: "", newPass: "", confirmPass: "" });
+
     } catch (error) {
-      Swal.fire("Error", "Contraseña actual incorrecta", "error");
+      Swal.fire("Error", "No se pudo actualizar la contraseña", "error");
     }
   };
 
   // =====================================================
-  // 🔥 UI
+  // 🔥 UI COMPLETO
   // =====================================================
   return (
     <div className="min-h-screen bg-[#f5efe7] pb-20 relative">
@@ -320,7 +344,9 @@ const ProfileView = () => {
 
             {/* Nombre */}
             <div>
-              <p className="font-semibold text-gray-700 mb-1">Nombre completo</p>
+              <p className="font-semibold text-gray-700 mb-1">
+                Nombre completo
+              </p>
               <input
                 type="text"
                 disabled={!editing}
@@ -330,12 +356,16 @@ const ProfileView = () => {
                   editing ? "bg-white border-[#e4d7c5]" : "bg-[#faf6f1]"
                 } shadow-sm`}
               />
-              {errors.name && <p className="text-red-500 text-sm mt-1">{errors.name}</p>}
+              {errors.name && (
+                <p className="text-red-500 text-sm mt-1">{errors.name}</p>
+              )}
             </div>
 
             {/* Email */}
             <div>
-              <p className="font-semibold text-gray-700 mb-1">Correo electrónico</p>
+              <p className="font-semibold text-gray-700 mb-1">
+                Correo electrónico
+              </p>
               <input
                 type="email"
                 disabled
@@ -347,7 +377,9 @@ const ProfileView = () => {
 
             {/* Teléfono */}
             <div>
-              <p className="font-semibold text-gray-700 mb-1">Número de teléfono</p>
+              <p className="font-semibold text-gray-700 mb-1">
+                Número de teléfono
+              </p>
               <input
                 type="text"
                 disabled={!editing}
@@ -357,7 +389,9 @@ const ProfileView = () => {
                   editing ? "bg-white border-[#e4d7c5]" : "bg-[#faf6f1]"
                 } shadow-sm`}
               />
-              {errors.phone && <p className="text-red-500 text-sm mt-1">{errors.phone}</p>}
+              {errors.phone && (
+                <p className="text-red-500 text-sm mt-1">{errors.phone}</p>
+              )}
             </div>
 
             {/* Dirección */}
@@ -378,7 +412,7 @@ const ProfileView = () => {
             </div>
           </div>
 
-          {/* CAMBIAR CONTRASEÑA */}
+          {/* 🔐 CAMBIAR CONTRASEÑA */}
           <div className="mt-10 flex justify-center">
             <button
               onClick={() => setShowPassModal(true)}
@@ -390,7 +424,9 @@ const ProfileView = () => {
         </div>
       </div>
 
-      {/* MODAL CONTRASEÑA */}
+      {/* ===================================================== */}
+      {/* 🔐 MODAL CAMBIO DE CONTRASEÑA */}
+      {/* ===================================================== */}
       {showPassModal && (
         <div
           className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center px-4 z-50"
@@ -412,27 +448,51 @@ const ProfileView = () => {
             </h2>
 
             <div className="space-y-5">
+
+              {/* Contraseña actual */}
               <input
                 type="password"
                 placeholder="Contraseña actual"
+                value={passwordData.oldPass}
                 onChange={(e) =>
-                  setPasswordData((prev) => ({ ...prev, oldPass: e.target.value }))
+                  setPasswordData((prev) => ({
+                    ...prev,
+                    oldPass: e.target.value,
+                  }))
                 }
                 className="w-full px-4 py-3 rounded-xl border border-[#e4d7c5] shadow-sm"
               />
 
+              <button
+                onClick={verifyOldPassword}
+                className="w-full py-2 rounded-xl bg-[#826c43] text-white font-semibold hover:scale-105 transition"
+              >
+                Validar contraseña actual
+              </button>
+
+              {/* Nueva contraseña */}
               <input
                 type="password"
                 placeholder="Nueva contraseña"
+                disabled={!isOldPassVerified}
+                style={{ opacity: isOldPassVerified ? 1 : 0.4 }}
+                value={passwordData.newPass}
                 onChange={(e) =>
-                  setPasswordData((prev) => ({ ...prev, newPass: e.target.value }))
+                  setPasswordData((prev) => ({
+                    ...prev,
+                    newPass: e.target.value,
+                  }))
                 }
                 className="w-full px-4 py-3 rounded-xl border border-[#e4d7c5] shadow-sm"
               />
 
+              {/* Confirmar */}
               <input
                 type="password"
                 placeholder="Confirmar contraseña"
+                disabled={!isOldPassVerified}
+                style={{ opacity: isOldPassVerified ? 1 : 0.4 }}
+                value={passwordData.confirmPass}
                 onChange={(e) =>
                   setPasswordData((prev) => ({
                     ...prev,
@@ -444,7 +504,14 @@ const ProfileView = () => {
 
               <button
                 onClick={handlePasswordChange}
-                className="w-full mt-4 flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-gradient-to-r from-[#826c43] to-[#e66748] text-white shadow font-semibold"
+                disabled={!isOldPassVerified}
+                className={`w-full mt-4 flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold shadow transition 
+                  ${
+                    isOldPassVerified
+                      ? "bg-gradient-to-r from-[#826c43] to-[#e66748] text-white hover:scale-105"
+                      : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                  }
+                `}
               >
                 Guardar Contraseña
               </button>

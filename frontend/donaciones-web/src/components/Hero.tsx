@@ -25,10 +25,10 @@ const Hero = () => {
 
           <div className="flex gap-4 mt-8">
 
-            <button className="bg-[#826c43] text-white px-6 py-3 rounded-xl shadow-md hover:bg-[#6d5938] flex items-center gap-2 transition-all hover:-translate-y-1">
+            {/* <button className="bg-[#826c43] text-white px-6 py-3 rounded-xl shadow-md hover:bg-[#6d5938] flex items-center gap-2 transition-all hover:-translate-y-1">
               <Search size={18} /> 
               EXPLORAR
-            </button>
+            </button> */}
 
             <button
               onClick={() => navigate("/mapa-donantes")}
@@ -45,8 +45,13 @@ const Hero = () => {
         <div className="relative flex-1 flex justify-center">
 
           {/* Círculo central */}
-          <div className="w-64 h-64 bg-white rounded-full shadow-xl relative"></div>
-
+          <div className="w-64 h-64 rounded-full shadow-xl relative overflow-hidden bg-white flex items-center justify-center">
+            <img
+              src="/donacion1.png"   // ← pon la ruta correcta del archivo
+              alt="Donaciones"
+              className="w-full h-full object-contain p-4"
+            />
+          </div>
           {/* Iconos flotando alrededor */}
           <div className="absolute -top-20 animate-float">
             <div className="bg-white shadow-md p-4 rounded-full">

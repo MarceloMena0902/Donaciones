@@ -33,14 +33,26 @@ const DonationDashboard = () => {
     const load = async () => {
       try {
         const res = await axios.get(`${API_URL}/user/${user.uid}`);
-        setDonaciones(res.data || []);
+
+        // ===========================
+        //   ⛔ FILTRAR DONACIONES VENCIDAS
+        // ===========================
+        const hoy = new Date();
+
+        const activas = (res.data || []).filter((d: any) => {
+          if (!d.expirationDate) return true; // si no tiene fecha, no se filtra
+          const exp = new Date(d.expirationDate);
+          return exp >= hoy; // solo donaciones NO vencidas
+        });
+
+        setDonaciones(activas);
+
       } catch (err) {
         console.log("❌ Error cargando donaciones:", err);
       } finally {
         setLoading(false);
       }
     };
-
     load();
   }, [user]);
 

@@ -53,6 +53,7 @@ export const getNotifications = async (req, res) => {
     const snapshot = await db
       .collection("notifications")
       .where("userId", "==", userId)
+      .where("read", "==", false) 
       .orderBy("createdAt", "desc")
       .get();
 

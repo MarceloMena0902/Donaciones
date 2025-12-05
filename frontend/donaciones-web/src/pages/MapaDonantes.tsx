@@ -44,7 +44,8 @@ const MapaDonantes = () => {
   const [loading, setLoading] = useState(true);
   const [categoria, setCategoria] = useState("Todos");
   const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
+
 const navigate = useNavigate();
   // ⭐ Donaciones estáticas para pruebas
   const staticDonations = [
@@ -143,7 +144,7 @@ const prevImage = (images: string[]) => {
 
   return (
     <div className="bg-[#f5efe7] min-h-screen w-full">
-      {user ? <NavbarLogged /> : <Navbar />}
+      {authLoading ? <Navbar /> : user?.uid ? <NavbarLogged /> : <Navbar />}
 
       <div className="pt-6 px-10">
 

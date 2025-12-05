@@ -130,7 +130,11 @@ const NavbarLogged = () => {
           chatCreated: !!n.chatId,
         }));
 
-        setNotifications(removeDuplicateNotifications(parsed));
+        // 🔥 SOLO NOTIFICACIONES NO LEÍDAS
+        const unreadOnly = parsed.filter(n => !n.read);
+
+        setNotifications(removeDuplicateNotifications(unreadOnly));
+
       } catch (error) {
         console.log("❌ Error cargando notificaciones:", error);
         setNotifications([]); // evita romper render

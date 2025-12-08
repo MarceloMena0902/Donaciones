@@ -42,13 +42,13 @@ const NavbarLogged = () => {
   const { user, logout, loading } = useAuth();
 
   // 🔥 RETORNO SEGURO – NUNCA BREAK DE HOOKS
-  if (loading || !user || !user.uid) {
-    return (
-      <nav className="w-full bg-white shadow-md border-b border-[#e5dacb] px-8 py-4">
-        <span className="text-[#826c43] font-semibold">Cargando...</span>
-      </nav>
-    );
-  }
+  // if (loading || !user || !user.uid) {
+  //   return (
+  //     <nav className="w-full bg-white shadow-md border-b border-[#e5dacb] px-8 py-4">
+  //       <span className="text-[#826c43] font-semibold">Cargando...</span>
+  //     </nav>
+  //   );
+  // }
 
   // =====================
   //  🔥 HOOKS CORRECTOS
@@ -131,7 +131,9 @@ const NavbarLogged = () => {
         }));
 
         // 🔥 SOLO NOTIFICACIONES NO LEÍDAS
-        const unreadOnly = parsed.filter(n => !n.read);
+        const unreadOnly = parsed.filter(n =>
+          n.read === false || n.read === undefined
+        );
 
         setNotifications(removeDuplicateNotifications(unreadOnly));
 

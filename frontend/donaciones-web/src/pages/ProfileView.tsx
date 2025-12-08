@@ -38,7 +38,19 @@ const ProfileView = () => {
   });
 
   const [newAvatarFile, setNewAvatarFile] = useState<File | null>(null);
+    useEffect(() => {
+    if (!showPassModal) {
+      // Vaciar los campos
+      setPasswordData({
+        oldPass: "",
+        newPass: "",
+        confirmPass: "",
+      });
 
+      // Resetear verificación de contraseña actual
+      setIsOldPassVerified(false);
+    }
+  }, [showPassModal]);
   // =====================================================
   // 🔥 CARGAR PERFIL DESDE BACKEND
   // =====================================================
@@ -203,6 +215,9 @@ const ProfileView = () => {
     setEditing(false);
     setNewAvatarFile(null);
   };
+    // 🔥 LIMPIAR CAMPOS DE CONTRASEÑA CUANDO SE CIERRA EL MODAL
+
+
 
   // =====================================================
   // 🔥 VALIDAR CONTRASEÑA ACTUAL
@@ -271,7 +286,7 @@ const ProfileView = () => {
       Swal.fire("Error", "No se pudo actualizar la contraseña", "error");
     }
   };
-
+  
   // =====================================================
   // 🔥 UI COMPLETO
   // =====================================================

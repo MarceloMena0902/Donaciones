@@ -123,7 +123,8 @@ const navigate = useNavigate();
      d.location &&
      typeof d.location.lat === "number" &&
      typeof d.location.lng === "number" &&
-     !isExpired(d.expirationDate) // 👈 NO mostrar vencidas
+     !isExpired(d.expirationDate) && // 👈 NO mostrar vencidas
+     d.status !== "Cancelada" 
  );
 // const donacionesConUbicacion = filtradas.filter(
 //   (d) =>

@@ -15,7 +15,9 @@ import { uploadImage } from "../services/cloudinaryService";
 const Register = () => {
   const navigate = useNavigate();
 
-  // Estados
+  // ============================
+  // ESTADOS DE FORMULARIO
+  // ============================
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -26,7 +28,55 @@ const Register = () => {
   const [preview, setPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // PREVIEW DE IMAGEN
+  // ============================
+  // ERRORES POR CAMPO
+  // ============================
+  const [errors, setErrors] = useState({
+    name: "",
+    email: "",
+    password: "",
+    confirmPassword: "",
+    phone: "",
+    address: "",
+  });
+
+  // ============================
+  // VALIDADORES
+  // ============================
+  const validateName = (v: string) =>
+    v.trim().length === 0 ? "El nombre es obligatorio." : "";
+
+  const validateEmail = (v: string) => {
+    if (!v) return "El correo es obligatorio.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return "Correo no válido.";
+    return "";
+  };
+
+  const validatePassword = (v: string) => {
+    if (!v) return "La contraseña es obligatoria.";
+    if (v.length < 6) return "Debe tener mínimo 6 caracteres.";
+    return "";
+  };
+
+  const validateConfirmPassword = (v: string) => {
+    if (v !== password) return "Las contraseñas no coinciden.";
+    return "";
+  };
+
+  const validatePhone = (v: string) => {
+    if (v && v.length < 7) return "Número de teléfono no válido, debe tener 8 dígitos.";
+    return "";
+  };
+
+  const validateAddress = (v: string) => {
+    if (v.trim() === "") return "";
+    if (v.length < 3) return "Dirección demasiado corta.";
+    return "";
+  };
+
+  // ============================
+  // PREVIEW FOTO
+  // ============================
   const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -35,25 +85,26 @@ const Register = () => {
     }
   };
 
-  // SUBMIT
+  // ============================
+  // MANEJO SUBMIT
+  // ============================
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const cleanName = name.trim();
-    const cleanEmail = email.trim().replace(/\s+/g, ""); // ELIMINA TODOS LOS ESPACIOS
-    const cleanPhone = phone.trim();
-    const cleanAddress = address.trim();
-    const cleanPass = password.replace(/\s+/g, ""); // NO PERMITE ESPACIOS
-    const cleanPass2 = confirmPassword.replace(/\s+/g, "");
+    // Validaciones finales antes de enviar
+    const newErrors = {
+      name: validateName(name),
+      email: validateEmail(email),
+      password: validatePassword(password),
+      confirmPassword: validateConfirmPassword(confirmPassword),
+      phone: validatePhone(phone),
+      address: validateAddress(address),
+    };
 
-    // Validaciones
-    if (!cleanName || !cleanEmail || !cleanPass || !cleanPass2) {
-      Swal.fire("Error", "Todos los campos obligatorios deben llenarse.", "error");
-      return;
-    }
+    setErrors(newErrors);
 
-    if (cleanPass !== cleanPass2) {
-      Swal.fire("Error", "Las contraseñas no coinciden.", "error");
+    if (Object.values(newErrors).some((err) => err !== "")) {
+      Swal.fire("Error", "Por favor corrige los campos marcados.", "error");
       return;
     }
 
@@ -64,11 +115,11 @@ const Register = () => {
       if (photo) photoUrl = await uploadImage(photo);
 
       await registerWithEmail(
-        cleanName,
-        cleanEmail,
-        cleanPass,
-        cleanPhone,
-        cleanAddress,
+        name.trim(),
+        email.trim(),
+        password.trim(),
+        phone.trim(),
+        address.trim(),
         photoUrl
       );
 
@@ -79,33 +130,64 @@ const Register = () => {
         confirmButtonColor: "#826c43",
       }).then(() => navigate("/login"));
     } catch (error) {
-      console.error("❌ Error en registro:", error);
       Swal.fire("Error", "No se pudo completar el registro", "error");
     } finally {
       setLoading(false);
     }
   };
 
-  // LOGIN SOCIAL
-  const handleSocial = async (provider: "Google" | "Facebook") => {
-    setLoading(true);
+  // ============================
+  // VALIDACIÓN EN TIEMPO REAL
+  // ============================
+  const handleBlur = (field: string) => {
+    let value = "";
+    let error = "";
 
-    try {
-      if (provider === "Google") await loginWithGoogle();
-      else await loginWithFacebook();
+    switch (field) {
+      case "name":
+        value = name;
+        error = validateName(value);
+        break;
 
-      Swal.fire({
-        title: "Cuenta creada 🎉",
-        text: `Registro exitoso con ${provider}`,
-        icon: "success",
-      }).then(() => navigate("/dashboard"));
-    } catch (err) {
-      Swal.fire("Error", `No se pudo registrar con ${provider}`, "error");
-    } finally {
-      setLoading(false);
+      case "email":
+        value = email;
+        error = validateEmail(value);
+        break;
+
+      case "password":
+        value = password;
+        error = validatePassword(value);
+        // También validar confirmación si ya hay algo escrito
+        if (confirmPassword) {
+          setErrors((prev) => ({
+            ...prev,
+            confirmPassword: validateConfirmPassword(confirmPassword),
+          }));
+        }
+        break;
+
+      case "confirmPassword":
+        value = confirmPassword;
+        error = validateConfirmPassword(value);
+        break;
+
+      case "phone":
+        value = phone;
+        error = validatePhone(value);
+        break;
+
+      case "address":
+        value = address;
+        error = validateAddress(value);
+        break;
     }
+
+    setErrors((prev) => ({ ...prev, [field]: error }));
   };
 
+  // ============================
+  // UI PRINCIPAL
+  // ============================
   return (
     <div className="w-full min-h-screen flex items-center justify-center px-6 py-16 bg-gradient-to-br from-[#f5efe7] to-[#efe7dc]">
 
@@ -121,10 +203,10 @@ const Register = () => {
           Únete a la comunidad de donantes 🤝
         </p>
 
-        {/* ==== SOCIAL LOGIN ==== */}
+        {/* SOCIAL LOGIN */}
         <div className="space-y-3 mb-8">
           <button
-            onClick={() => handleSocial("Google")}
+            onClick={() => loginWithGoogle()}
             disabled={loading}
             className="w-full flex items-center justify-center gap-3 py-3 rounded-xl bg-white border border-[#dccdbb]"
           >
@@ -133,7 +215,7 @@ const Register = () => {
           </button>
 
           <button
-            onClick={() => handleSocial("Facebook")}
+            onClick={() => loginWithFacebook()}
             disabled={loading}
             className="w-full flex items-center justify-center gap-3 py-3 rounded-xl bg-[#1877f2] text-white"
           >
@@ -148,99 +230,93 @@ const Register = () => {
           <div className="h-px bg-[#d6c7b7] flex-1" />
         </div>
 
-        {/* ============ FORMULARIO ============ */}
+        {/* ============================
+            FORMULARIO
+        ============================ */}
         <form className="space-y-6" onSubmit={handleSubmit}>
 
           {/* Nombre */}
-          <Field label="Nombre Completo" icon={<User size={20} className="text-[#826c43]" />}>
+          <Field label="Nombre Completo" icon={<User size={20} className="text-[#826c43]" />} error={errors.name}>
             <input
               type="text"
               value={name}
-              onChange={(e) =>
-                setName(e.target.value.replace(/^\s+/, "")) // NO permitir espacio inicial
-              }
+              onChange={(e) => setName(e.target.value.replace(/^\s+/, ""))}
+              onBlur={() => handleBlur("name")}
               placeholder="Tu nombre completo"
-              className="input"
-              required
+              className="input w-full"
             />
           </Field>
 
-          {/* Correo */}
-          <Field label="Correo Electrónico" icon={<Mail size={20} className="text-[#826c43]" />}>
+          {/* Email */}
+          <Field label="Correo Electrónico" icon={<Mail size={20} className="text-[#826c43]" />} error={errors.email}>
             <input
               type="email"
               value={email}
               onChange={(e) => {
-                // 1️⃣ ELIMINA TODOS LOS ESPACIOS, incluso si los pega
-                const cleaned = e.target.value.replace(/\s+/g, "");
-
-                setEmail(cleaned);
+                const clean = e.target.value.replace(/\s+/g, "");
+                setEmail(clean);
               }}
-              onKeyDown={(e) => {
-                // 2️⃣ BLOQUEA el espacio desde el teclado
-                if (e.key === " ") e.preventDefault();
-              }}
+              onKeyDown={(e) => e.key === " " && e.preventDefault()}
               onPaste={(e) => {
-                // 3️⃣ BLOQUEA pegar si contiene espacios
-                const text = e.clipboardData.getData("text");
-                if (/\s/.test(text)) e.preventDefault();
+                if (/\s/.test(e.clipboardData.getData("text"))) e.preventDefault();
               }}
+              onBlur={() => handleBlur("email")}
               placeholder="correo@ejemplo.com"
-              className="input"
-              required
+              className="input w-full"
             />
-
           </Field>
 
           {/* Contraseña */}
-          <Field label="Contraseña" icon={<Lock size={20} className="text-[#826c43]" />}>
+          <Field label="Contraseña" icon={<Lock size={20} className="text-[#826c43]" />} error={errors.password}>
             <input
               type="password"
               value={password}
-              onChange={(e) =>
-                setPassword(e.target.value.replace(/\s+/g, "")) // NO espacios permitidos
-              }
+              onChange={(e) => setPassword(e.target.value.replace(/\s+/g, ""))}
+              onBlur={() => handleBlur("password")}
               placeholder="••••••••"
-              className="input"
-              required
+              className="input w-full"
             />
           </Field>
 
           {/* Confirmar Contraseña */}
-          <Field label="Confirmar Contraseña" icon={<Lock size={20} className="text-[#826c43]" />}>
+          <Field
+            label="Confirmar Contraseña"
+            icon={<Lock size={20} className="text-[#826c43]" />}
+            error={errors.confirmPassword}
+          >
             <input
               type="password"
               value={confirmPassword}
               onChange={(e) =>
-                setConfirmPassword(e.target.value.replace(/\s+/g, "")) // NO espacios permitidos
+                setConfirmPassword(e.target.value.replace(/\s+/g, ""))
               }
+              onBlur={() => handleBlur("confirmPassword")}
               placeholder="Repite tu contraseña"
-              className="input"
-              required
+              className="input w-full"
             />
           </Field>
 
           {/* Teléfono */}
-          <Field label="Teléfono" icon={<Phone size={20} className="text-[#826c43]" />}>
+          <Field label="Teléfono" icon={<Phone size={20} className="text-[#826c43]" />} error={errors.phone}>
             <input
               type="text"
               value={phone}
-              onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))} // solo números
+              onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
+              onBlur={() => handleBlur("phone")}
               placeholder="Ej: 76452345"
-              className="input"
+              className="input w-full"
             />
           </Field>
 
           {/* Dirección */}
-          <Field label="Dirección" icon={<Home size={20} className="text-[#826c43]" />}>
+          <Field label="Dirección" icon={<Home size={20} className="text-[#826c43]" />} error={errors.address}>
             <input
               type="text"
               value={address}
-              onChange={(e) =>
-                setAddress(e.target.value.replace(/^\s+/, "")) // No espacio al inicio
-              }
+              onChange={(e) => setAddress(e.target.value.replace(/^\s+/, ""))}
+              onBlur={() => handleBlur("address")}
               placeholder="Tu dirección"
-              className="input"
+              className="input w-full"
             />
           </Field>
 
@@ -270,12 +346,8 @@ const Register = () => {
             )}
           </div>
 
-          {/* BOTÓN REGISTRAR */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="submit-btn"
-          >
+          {/* BOTÓN SUBMIT */}
+          <button type="submit" disabled={loading} className="submit-btn">
             {loading ? "Registrando..." : "Crear Cuenta"}
           </button>
 
@@ -293,13 +365,21 @@ const Register = () => {
 
 export default Register;
 
-// COMPONENTE FIELD
-const Field = ({ label, icon, children }: any) => (
+// ============================
+// COMPONENTE FIELD ACTUALIZADO
+// ============================
+const Field = ({ label, icon, error, children }: any) => (
   <div>
     <label className="block text-gray-700 font-medium mb-1">{label}</label>
-    <div className="flex items-center gap-3 bg-white border border-[#dccdbb] rounded-xl px-4 py-3 shadow-sm focus-within:border-[#e66748] transition-all">
+
+    <div
+      className={`flex items-center gap-3 bg-white border rounded-xl px-4 py-3 shadow-sm transition-all
+      ${error ? "border-red-500" : "border-[#dccdbb] focus-within:border-[#e66748]"}`}
+    >
       {icon}
       {children}
     </div>
+
+    {error && <p className="text-red-600 text-sm mt-1">{error}</p>}
   </div>
 );

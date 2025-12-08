@@ -1,5 +1,5 @@
 // src/pages/CreateDonation.tsx
-import { useState } from "react";
+import { useState, useRef } from "react";
 import axios from "axios";
 import { useAuth } from "../context/AuthContext";
 
@@ -14,7 +14,6 @@ import {
   Calendar,
   Apple,
   Heart,
-  ArrowLeft,
 } from "lucide-react";
 
 import { MapContainer, TileLayer, Marker, useMapEvents } from "react-leaflet";
@@ -57,10 +56,29 @@ const CreateDonation = () => {
     lng: null,
   });
 
+  const [errors, setErrors] = useState({
+    tipo: "",
+    fechaCaducidad: "",
+    descripcion: "",
+    cantidad: "",
+    unidad: "",
+    ubicacion: "",
+    images: "",
+  });
+
   const [images, setImages] = useState<File[]>([]);
   const today = new Date().toISOString().split("T")[0];
 
   const API_URL = "http://localhost:4000/api/donations";
+
+  // Refs para scroll
+  const tipoRef = useRef<HTMLDivElement | null>(null);
+  const fechaRef = useRef<HTMLDivElement | null>(null);
+  const cantidadRef = useRef<HTMLDivElement | null>(null);
+  const unidadRef = useRef<HTMLDivElement | null>(null);
+  const ubicacionRef = useRef<HTMLDivElement | null>(null);
+  const descripcionRef = useRef<HTMLDivElement | null>(null);
+  const imagesRef = useRef<HTMLDivElement | null>(null);
 
   if (!user)
     return (
@@ -69,9 +87,7 @@ const CreateDonation = () => {
       </div>
     );
 
-  // ----------------------------------------------------------------
-  // 1️⃣ Reverse geocoding (obtener dirección AUTOMÁTICA del pin)
-  // ----------------------------------------------------------------
+  // ------------------- 1) REVERSE GEOCODING -------------------
   const LocationSelector = () => {
     useMapEvents({
       click: async (e) => {
@@ -91,6 +107,8 @@ const CreateDonation = () => {
             lng,
             direccion: address,
           }));
+
+          setErrors((prev) => ({ ...prev, ubicacion: "" }));
         } catch (err) {
           console.log("Error obteniendo dirección:", err);
         }
@@ -100,22 +118,17 @@ const CreateDonation = () => {
     return null;
   };
 
-  // ----------------------------------------------------------------
-  // 2️⃣ Manejo de nuevas imágenes (máx 5)
-  // ----------------------------------------------------------------
+  // ------------------- 2) Manejo de imágenes -------------------
   const handleImageUpload = (files: FileList) => {
     const selected = Array.from(files);
-    const total = images.length;
-    const slots = 5 - total;
-
+    const slots = 5 - images.length;
     if (slots <= 0) return;
 
     setImages([...images, ...selected.slice(0, slots)]);
+    setErrors((prev) => ({ ...prev, images: "" }));
   };
 
-  // ----------------------------------------------------------------
-  // 3️⃣ Subir imágenes → Cloudinary vía backend
-  // ----------------------------------------------------------------
+  // ------------------- 3) Subir imágenes -------------------
   const uploadImages = async (): Promise<string[]> => {
     const urls: string[] = [];
 
@@ -135,24 +148,59 @@ const CreateDonation = () => {
     return urls;
   };
 
-  // ----------------------------------------------------------------
-  // 4️⃣ Enviar donación al backend
-  // ----------------------------------------------------------------
+  // ------------------- 4) VALIDACIÓN COMPLETA -------------------
+  const validateForm = (): boolean => {
+    const newErrors = {
+      tipo: "",
+      fechaCaducidad: "",
+      descripcion: "",
+      cantidad: "",
+      unidad: "",
+      ubicacion: "",
+      images: "",
+    };
+
+    if (!form.tipo) newErrors.tipo = "Debe seleccionar un tipo de alimento.";
+    if (!form.fechaCaducidad)
+      newErrors.fechaCaducidad = "Debe ingresar una fecha válida.";
+    if (form.cantidad <= 0)
+      newErrors.cantidad = "La cantidad debe ser mayor a 0.";
+    if (!form.unidad) newErrors.unidad = "Debe seleccionar una unidad.";
+    if (!form.lat || !form.lng)
+      newErrors.ubicacion = "Debe seleccionar una ubicación en el mapa.";
+    if (!form.descripcion.trim())
+      newErrors.descripcion = "Debe ingresar una descripción.";
+    if (images.length === 0)
+      newErrors.images = "Debe subir al menos una imagen.";
+
+    setErrors(newErrors);
+
+    // ORDEN DE SCROLL
+    if (newErrors.tipo && tipoRef.current)
+      tipoRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    else if (newErrors.fechaCaducidad && fechaRef.current)
+      fechaRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    else if (newErrors.cantidad && cantidadRef.current)
+      cantidadRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    else if (newErrors.unidad && unidadRef.current)
+      unidadRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    else if (newErrors.ubicacion && ubicacionRef.current)
+      ubicacionRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    else if (newErrors.descripcion && descripcionRef.current)
+      descripcionRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+    else if (newErrors.images && imagesRef.current)
+      imagesRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+
+    return !Object.values(newErrors).some((msg) => msg !== "");
+  };
+
+  // ------------------- 5) Submit -------------------
   const submitDonation = async (e: any) => {
     e.preventDefault();
 
-    if (!form.tipo || !form.descripcion || !form.unidad || !form.lat || !form.lng) {
-      Swal.fire({
-        icon: "error",
-        title: "Campos incompletos",
-        text: "Completa los campos requeridos.",
-        confirmButtonColor: "#e66748",
-      });
-      return;
-    }
+    if (!validateForm()) return;
 
     try {
-      // 🔥 Primero subir imágenes
       const imageUrls = await uploadImages();
 
       const donationToSend = {
@@ -166,7 +214,7 @@ const CreateDonation = () => {
           lat: form.lat,
           lng: form.lng,
         },
-        expirationDate: form.fechaCaducidad || null,
+        expirationDate: form.fechaCaducidad,
         images: imageUrls,
       };
 
@@ -178,9 +226,8 @@ const CreateDonation = () => {
         text: "Se registró correctamente 🎉",
         confirmButtonColor: "#826c43",
       }).then(() => (window.location.href = "/dashboard"));
-    } catch (err: any) {
+    } catch (err) {
       console.log("Error:", err);
-
       Swal.fire({
         icon: "error",
         title: "Error al crear donación",
@@ -190,9 +237,7 @@ const CreateDonation = () => {
     }
   };
 
-  // ----------------------------------------------------------------
-  // 5️⃣ UI
-  // ----------------------------------------------------------------
+  // ------------------- 6) UI -------------------
   return (
     <>
       <NavbarLogged />
@@ -214,7 +259,7 @@ const CreateDonation = () => {
           onSubmit={submitDonation}
           className="max-w-5xl mx-auto bg-white rounded-2xl shadow-xl p-10 border"
         >
-          {/* ---------------------- INFORMACIÓN ---------------------- */}
+          {/* INFORMACIÓN BÁSICA */}
           <section className="mb-10 bg-[#faf6f1] border rounded-xl p-6">
             <h2 className="text-xl font-bold mb-5 flex gap-2 items-center">
               <Info className="text-[#826c43]" /> Información Básica
@@ -222,91 +267,133 @@ const CreateDonation = () => {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Tipo */}
-              <div>
+              <div ref={tipoRef}>
                 <label className="font-semibold mb-2 flex gap-2 items-center">
                   <Apple size={18} /> Tipo de alimento
                 </label>
                 <select
                   value={form.tipo}
-                  onChange={(e) => setForm({ ...form, tipo: e.target.value })}
-                  className="w-full border rounded-xl px-4 py-3"
+                  onChange={(e) => {
+                    setForm({ ...form, tipo: e.target.value });
+                    setErrors({ ...errors, tipo: "" });
+                  }}
+                  className={`w-full border rounded-xl px-4 py-3 ${
+                    errors.tipo ? "border-red-500" : ""
+                  }`}
                 >
                   <option value="">Seleccione...</option>
                   <option value="Perecedero">Perecedero</option>
                   <option value="No perecedero">No perecedero</option>
                   <option value="Preparado">Preparado</option>
                 </select>
+                {errors.tipo && (
+                  <p className="text-red-600 text-sm">{errors.tipo}</p>
+                )}
               </div>
 
               {/* Fecha */}
-              <div>
+              <div ref={fechaRef}>
                 <label className="font-semibold mb-2 flex gap-2 items-center">
                   <Calendar size={18} /> Fecha de caducidad
                 </label>
                 <input
                   type="date"
-                  min={today}            // 🔥 evita elegir fechas pasadas
+                  min={today}
                   value={form.fechaCaducidad}
-                  onChange={(e) =>
-                    setForm({ ...form, fechaCaducidad: e.target.value })
-                  }
-                  className="w-full border rounded-xl px-4 py-3"
+                  onChange={(e) => {
+                    setForm({ ...form, fechaCaducidad: e.target.value });
+                    setErrors({ ...errors, fechaCaducidad: "" });
+                  }}
+                  className={`w-full border rounded-xl px-4 py-3 ${
+                    errors.fechaCaducidad ? "border-red-500" : ""
+                  }`}
                 />
+                {errors.fechaCaducidad && (
+                  <p className="text-red-600 text-sm">{errors.fechaCaducidad}</p>
+                )}
               </div>
             </div>
 
             {/* Descripción */}
-            <div className="mt-6">
+            <div className="mt-6" ref={descripcionRef}>
               <label className="font-semibold mb-2 flex gap-2 items-center">
                 <Info size={18} /> Descripción
               </label>
               <textarea
                 rows={4}
                 value={form.descripcion}
-                onChange={(e) =>
-                  setForm({ ...form, descripcion: e.target.value })
-                }
-                className="w-full border rounded-xl px-4 py-3"
+                onChange={(e) => {
+                  setForm({ ...form, descripcion: e.target.value });
+                  setErrors({ ...errors, descripcion: "" });
+                }}
+                className={`w-full border rounded-xl px-4 py-3 ${
+                  errors.descripcion ? "border-red-500" : ""
+                }`}
               />
+              {errors.descripcion && (
+                <p className="text-red-600 text-sm">{errors.descripcion}</p>
+              )}
             </div>
 
-            {/* Cantidad + Unidad */}
+            {/* Cantidad y unidad */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-              <div>
+              {/* Cantidad */}
+              <div ref={cantidadRef}>
                 <label className="font-semibold mb-2 flex gap-2 items-center">
                   <Weight size={18} /> Cantidad
                 </label>
                 <input
                   type="number"
                   value={form.cantidad}
-                  min={1}
-                  onChange={(e) =>
-                    setForm({ ...form, cantidad: Number(e.target.value) })
-                  }
-                  className="w-full border rounded-xl px-4 py-3"
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setForm({ ...form, cantidad: v });
+                    setErrors({
+                      ...errors,
+                      cantidad: v <= 0 ? "La cantidad debe ser mayor a 0." : "",
+                    });
+                  }}
+                  className={`w-full border rounded-xl px-4 py-3 ${
+                    errors.cantidad ? "border-red-500" : ""
+                  }`}
                 />
+                {errors.cantidad && (
+                  <p className="text-red-600 text-sm">{errors.cantidad}</p>
+                )}
               </div>
 
-              <div>
+              {/* Unidad */}
+              <div ref={unidadRef}>
                 <label className="font-semibold mb-2 flex gap-2 items-center">
                   <Ruler size={18} /> Unidad
                 </label>
                 <select
                   value={form.unidad}
-                  onChange={(e) => setForm({ ...form, unidad: e.target.value })}
-                  className="w-full border rounded-xl px-4 py-3"
+                  onChange={(e) => {
+                    setForm({ ...form, unidad: e.target.value });
+                    setErrors({ ...errors, unidad: "" });
+                  }}
+                  className={`w-full border rounded-xl px-4 py-3 ${
+                    errors.unidad ? "border-red-500" : ""
+                  }`}
                 >
                   <option value="">Seleccione...</option>
                   {unidades.map((u) => (
                     <option key={u}>{u}</option>
                   ))}
                 </select>
+                {errors.unidad && (
+                  <p className="text-red-600 text-sm">{errors.unidad}</p>
+                )}
               </div>
             </div>
           </section>
 
-          {/* ---------------------- UBICACIÓN ---------------------- */}
-          <section className="mb-10 bg-[#faf6f1] border rounded-xl p-6">
+          {/* UBICACIÓN */}
+          <section
+            ref={ubicacionRef}
+            className="mb-10 bg-[#faf6f1] border rounded-xl p-6"
+          >
             <h2 className="text-xl font-bold mb-5 flex gap-2 items-center">
               <MapPin className="text-[#826c43]" /> Ubicación
             </h2>
@@ -316,8 +403,16 @@ const CreateDonation = () => {
               type="text"
               value={form.direccion}
               readOnly
-              className="w-full border rounded-xl px-4 py-3 mb-4 bg-gray-100"
+              className={`w-full border rounded-xl px-4 py-3 mb-4 bg-gray-100 ${
+                errors.ubicacion ? "border-red-500" : ""
+              }`}
             />
+
+            {errors.ubicacion && (
+              <p className="text-red-600 text-sm -mt-3 mb-3">
+                {errors.ubicacion}
+              </p>
+            )}
 
             <div className="rounded-xl overflow-hidden border shadow">
               <MapContainer
@@ -327,9 +422,7 @@ const CreateDonation = () => {
               >
                 <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
                 <LocationSelector />
-                {form.lat && form.lng && (
-                  <Marker position={[form.lat, form.lng]} />
-                )}
+                {form.lat && form.lng && <Marker position={[form.lat, form.lng]} />}
               </MapContainer>
             </div>
 
@@ -338,14 +431,19 @@ const CreateDonation = () => {
             </p>
           </section>
 
-          {/* ---------------------- IMÁGENES ---------------------- */}
-          <section className="mb-10 bg-[#faf6f1] border rounded-xl p-6">
+          {/* IMÁGENES */}
+          <section
+            ref={imagesRef}
+            className="mb-10 bg-[#faf6f1] border rounded-xl p-6"
+          >
             <h2 className="text-xl font-bold mb-5 flex gap-2 items-center">
               <FileImage className="text-[#826c43]" /> Imágenes
             </h2>
 
             <div
-              className="border-2 border-dashed border-[#826c43] rounded-xl p-10 text-center cursor-pointer"
+              className={`border-2 border-dashed rounded-xl p-10 text-center cursor-pointer ${
+                errors.images ? "border-red-500" : "border-[#826c43]"
+              }`}
               onClick={() => document.getElementById("imageInput")?.click()}
             >
               <CloudUpload size={55} className="mx-auto text-[#826c43]" />
@@ -363,7 +461,10 @@ const CreateDonation = () => {
               className="hidden"
               onChange={(e) => handleImageUpload(e.target.files!)}
             />
-            
+
+            {errors.images && (
+              <p className="text-red-600 text-sm mt-2">{errors.images}</p>
+            )}
 
             {images.length > 0 && (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
@@ -386,14 +487,13 @@ const CreateDonation = () => {
                 ))}
               </div>
             )}
+
             {images.length > 0 && (
-              <p className="text-sm">
-                {images.length} / 5 imágenes
-              </p>
+              <p className="text-sm mt-2">{images.length} / 5 imágenes</p>
             )}
           </section>
 
-          {/* ---------------------- BOTONES ---------------------- */}
+          {/* BOTONES */}
           <div className="flex flex-col md:flex-row gap-4 justify-center mt-10">
             <button
               type="submit"

@@ -1,13 +1,20 @@
-import { Heart, Users, Globe, Search, MapPin, Star } from "lucide-react";
+import { Heart, Users, Globe, MapPin, Star } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import Navbar from "../components/Navbar";
+import NavbarLogged from "../components/NavbarLogged";
+import { useAuth } from "../context/AuthContext";
 
 const Hero = () => {
   const navigate = useNavigate();
+  const { user, loading } = useAuth();
 
   return (
-<section className="w-full h-screen flex items-center bg-gradient-to-r from-[#f5efe7] to-[#efe7dc]">
+    <section className="w-full min-h-screen bg-gradient-to-r from-[#f5efe7] to-[#efe7dc]">
+      
+      {/* NAVBAR SEGÚN SESIÓN */}
+      {loading ? null : user ? <NavbarLogged /> : <Navbar />}
 
-      <div className="max-w-7xl mx-auto px-10 flex flex-col md:flex-row items-center gap-16">
+      <div className="max-w-7xl mx-auto px-10 flex flex-col md:flex-row items-center gap-16 pt-28">
 
         {/* Texto */}
         <div className="flex-1">
@@ -24,35 +31,24 @@ const Hero = () => {
           </p>
 
           <div className="flex gap-4 mt-8">
-
-            {/* <button className="bg-[#826c43] text-white px-6 py-3 rounded-xl shadow-md hover:bg-[#6d5938] flex items-center gap-2 transition-all hover:-translate-y-1">
-              <Search size={18} /> 
-              EXPLORAR
-            </button> */}
-
             <button
               onClick={() => navigate("/mapa-donantes")}
-              className="border border-[#826c43] text-[#826c43] px-6 py-3 rounded-xl hover:bg-[#f0e8dd] flex items-center gap-2 transition-all hover:-translate-y-1"
+              className="border border-[#826c43] text-[#826c43] px-6 py-3 rounded-xl 
+                         hover:bg-[#f0e8dd] flex items-center gap-2 transition-all hover:-translate-y-1"
             >
               <MapPin size={18} />
               VER MAPA
             </button>
-
           </div>
         </div>
 
-        {/* Círculo + Iconos flotantes */}
+        {/* Iconos flotantes */}
         <div className="relative flex-1 flex justify-center">
 
-          {/* Círculo central */}
           <div className="w-64 h-64 rounded-full shadow-xl relative overflow-hidden bg-white flex items-center justify-center">
-            <img
-              src="/donacion1.png"   // ← pon la ruta correcta del archivo
-              alt="Donaciones"
-              className="w-full h-full object-contain p-4"
-            />
+            <img src="/donacion1.png" alt="Donaciones" className="w-full h-full object-contain p-4" />
           </div>
-          {/* Iconos flotando alrededor */}
+
           <div className="absolute -top-20 animate-float">
             <div className="bg-white shadow-md p-4 rounded-full">
               <Heart size={26} className="text-[#826c43]" />
@@ -76,8 +72,8 @@ const Hero = () => {
               <Star size={26} className="text-[#826c43]" />
             </div>
           </div>
-
         </div>
+
       </div>
     </section>
   );

@@ -18,12 +18,14 @@ export const createDonation = async (req, res) => {
     } = req.body;
 
     if (!userId || !type || !description || !quantity || !unit) {
-      return res.status(400).json({
-        error: "Faltan datos obligatorios para la donación."
-      });
+      return res.status(400).json({ error: "Faltan datos obligatorios para la donación." });
     }
 
-    // 1) Crear donación
+    // ⏰ Ajuste de zona horaria Bolivia (UTC-4)
+    const expirationLocal = expirationDate
+      ? new Date(expirationDate + "T23:59:59-04:00")
+      : null;
+
     const donationRef = await db.collection("donations").add({
       userId,
       type,
@@ -31,14 +33,13 @@ export const createDonation = async (req, res) => {
       quantity,
       unit,
       location: location || null,
-      expirationDate: expirationDate || null,
+      expirationDate: expirationLocal,
       status: "Disponible",
       images: images || [],
       createdAt: new Date(),
       updatedAt: new Date(),
     });
 
-    // 2) Guardar ID de donación también en users/{uid}
     await db.collection("users").doc(userId).set(
       {
         donations: admin.firestore.FieldValue.arrayUnion(donationRef.id),
@@ -46,15 +47,13 @@ export const createDonation = async (req, res) => {
       { merge: true }
     );
 
-    res.status(201).json({
-      id: donationRef.id,
-      message: "Donación registrada correctamente."
-    });
+    res.status(201).json({ id: donationRef.id, message: "Donación registrada correctamente." });
 
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
+
 
 // ======================================================
 // OBTENER TODAS LAS DONACIONES
@@ -116,26 +115,29 @@ export const updateDonation = async (req, res) => {
       return res.status(404).json({ error: "Donación no encontrada." });
     }
 
+    const expirationLocal = expirationDate
+      ? new Date(expirationDate + "T23:59:59-04:00")
+      : null;
+
     await donationRef.update({
       type,
       description,
       quantity,
       unit,
       location,
-      expirationDate,
+      expirationDate: expirationLocal,
       status,
       images,
       updatedAt: new Date(),
     });
 
-    res.status(200).json({
-      message: "Donación actualizada correctamente."
-    });
+    res.status(200).json({ message: "Donación actualizada correctamente." });
 
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
+
 
 // ======================================================
 // ELIMINAR DONACIÓN

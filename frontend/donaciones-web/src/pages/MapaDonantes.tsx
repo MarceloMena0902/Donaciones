@@ -111,12 +111,21 @@ const navigate = useNavigate();
 
 
   // ⭐ FILTRO REAL PARA OCULTAR VENCIDAS
-   const isExpired = (expirationDate: string) => {
-   if (!expirationDate) return false; // si no hay fecha explícita, no se considera vencido
-   const today = new Date();
-   const exp = new Date(expirationDate);
-   return exp < today; // vencido si la fecha es menor a hoy
- };
+    const isExpired = (expirationDate: string) => {
+      if (!expirationDate) return false;
+
+      // Normalizar HOY
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      // Forzar fecha local (evita el desplazamiento UTC)
+      const exp = new Date(expirationDate + "T00:00:00");
+      exp.setHours(0, 0, 0, 0);
+
+      return exp < today;
+    };
+
+
 
    const donacionesConUbicacion = filtradas.filter(
    (d) =>

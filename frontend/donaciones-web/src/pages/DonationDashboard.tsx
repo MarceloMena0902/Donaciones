@@ -37,13 +37,12 @@ const DonationDashboard = () => {
         // ===========================
         //   ⛔ FILTRAR DONACIONES VENCIDAS
         // ===========================
-        const hoy = new Date();
+        const hoyString = new Date().toLocaleDateString("en-CA"); // 2025-12-09
 
         const activas = (res.data || []).filter((d: any) => {
-          if (!d.expirationDate) return true; // si no tiene fecha, no se filtra
-          const exp = new Date(d.expirationDate);
-          return exp >= hoy; // solo donaciones NO vencidas
+          return !d.expirationDate || d.expirationDate >= hoyString;
         });
+
 
         setDonaciones(activas);
 

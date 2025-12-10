@@ -67,7 +67,7 @@ const CreateDonation = () => {
   });
 
   const [images, setImages] = useState<File[]>([]);
-  const today = new Date().toISOString().split("T")[0];
+  const today = new Date().toLocaleDateString('en-CA');  // YYYY-MM-DD real sin UTC
 
   const API_URL = "http://localhost:4000/api/donations";
 

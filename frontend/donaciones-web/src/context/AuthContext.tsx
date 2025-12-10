@@ -3,6 +3,8 @@ import { auth } from "../firebaseConfig";
 import {
   onAuthStateChanged,
   signOut,
+  setPersistence,
+  browserSessionPersistence,
   type User
 } from "firebase/auth";
 import { useNavigate } from "react-router-dom";
@@ -18,30 +20,53 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-
   const navigate = useNavigate();
 
-  // Mantener sesión
-  useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
-      setUser(firebaseUser || null);
-      setLoading(false);
-    });
+  // 🔥 Canal para sincronizar sesión entre pestañas
+  const channel = new BroadcastChannel("auth-sync");
 
-    return unsubscribe;
+  useEffect(() => {
+    // persistencia SOLO para la sesión de ESTA ventana
+    setPersistence(auth, browserSessionPersistence).catch(console.error);
   }, []);
 
-  // 🔥 Logout real + bloqueo de botón atrás
+  // 🔥 Firebase detecta cambios de sesión
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser || null);
+      setLoading(false);
+
+      // Cuando una pestaña se loguea, notifica al resto
+      if (firebaseUser) channel.postMessage({ type: "LOGIN_SYNC" });
+    });
+
+    return unsub;
+  }, []);
+
+  // 🔥 Escuchar señales de otras pestañas
+  useEffect(() => {
+    channel.onmessage = (event) => {
+      if (event.data.type === "LOGIN_SYNC") {
+        // Forzar a que Firebase sincronice sesión desde otra pestaña
+        setUser(auth.currentUser);
+      }
+
+      if (event.data.type === "LOGOUT_SYNC") {
+        setUser(null);
+        navigate("/mapa-donantes", { replace: true });
+      }
+    };
+  }, []);
+
+  // 🔥 Logout completo
   const logout = async () => {
     await signOut(auth);
     setUser(null);
-    localStorage.removeItem("token");
 
-    // BORRAR HISTORIAL para que el botón ATRÁS no regrese
+    // Notificar a todas las pestañas
+    channel.postMessage({ type: "LOGOUT_SYNC" });
+
     navigate("/mapa-donantes", { replace: true });
-
-    // Forzar a borrar cache de historial
-    window.history.pushState(null, "", window.location.href);
   };
 
   return (
@@ -52,10 +77,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 };
 
 export const useAuth = () => {
-  const context = useContext(AuthContext);
-
-  if (!context)
-    throw new Error("useAuth debe usarse dentro de un AuthProvider");
-
-  return context;
+  const ctx = useContext(AuthContext);
+  if (!ctx) throw new Error("useAuth debe usarse dentro de AuthProvider");
+  return ctx;
 };

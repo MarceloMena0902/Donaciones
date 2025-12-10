@@ -67,7 +67,9 @@ const CreateDonation = () => {
   });
 
   const [images, setImages] = useState<File[]>([]);
-  const today = new Date().toLocaleDateString('en-CA');  // YYYY-MM-DD real sin UTC
+  const today = new Date().toLocaleDateString("en-CA", {
+  timeZone: "America/La_Paz",
+});  // YYYY-MM-DD real sin UTC
 
   const API_URL = "http://localhost:4000/api/donations";
 
@@ -214,7 +216,7 @@ const CreateDonation = () => {
           lat: form.lat,
           lng: form.lng,
         },
-        expirationDate: form.fechaCaducidad,
+        expirationDate: form.fechaCaducidad, 
         images: imageUrls,
       };
 

@@ -20,6 +20,48 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import axios from "axios";
 
+
+
+type FirestoreTimestamp = {
+  _seconds: number;
+  _nanoseconds: number;
+};
+const toBoliviaDateString = (seconds: number): string => {
+  const utcMs = seconds * 1000;
+
+  // Bolivia = UTC-4  → desplazamos -4 horas
+  const boliviaOffsetMinutes = -4 * 60;
+  const boliviaMs = utcMs + boliviaOffsetMinutes * 60 * 1000;
+
+  const d = new Date(boliviaMs);
+
+  const year = d.getUTCFullYear();
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`; // "YYYY-MM-DD"
+};
+
+const normalizeExpirationDate = (exp: any): string => {
+  if (!exp) return "";
+
+  if (typeof exp === "string") {
+    // "2025-12-09" o "2025-12-09T04:00:00.000Z"
+    return exp.slice(0, 10);
+  }
+
+  if (
+    typeof exp === "object" &&
+    exp !== null &&
+    "_seconds" in exp &&
+    typeof (exp as FirestoreTimestamp)._seconds === "number"
+  ) {
+    const seconds = (exp as FirestoreTimestamp)._seconds;
+    return toBoliviaDateString(seconds);
+  }
+  return "";
+};
+
 // Fix Leaflet
 const DefaultIcon = L.icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
@@ -40,7 +82,9 @@ type DonationForm = {
 };
 
 const unidades = ["kg", "L", "unidad", "caja"];
-const today = new Date().toISOString().split("T")[0];
+const today = new Date().toLocaleDateString("en-CA", {
+  timeZone: "America/La_Paz",
+});
 
 const EditDonation = () => {
   const { id } = useParams();
@@ -74,17 +118,26 @@ const EditDonation = () => {
 
         // Obtener dirección
         let address = data.location?.address || "";
-        if (data.location?.lat && data.location?.lng) {
-          const geo = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${data.location.lat}&lon=${data.location.lng}`
-          );
-          const geoJson = await geo.json();
-          address = geoJson.display_name || address;
+
+        // Solo intentar reverse geocoding si NO tenemos address
+        if (!address && data.location?.lat && data.location?.lng) {
+          try {
+            const geo = await fetch(
+              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${data.location.lat}&lon=${data.location.lng}`
+            );
+
+            if (geo.ok) {
+              const geoJson = await geo.json();
+              address = geoJson.display_name || address;
+            }
+          } catch (error) {
+            console.log("Error reverse geocoding (se usará la dirección almacenada):", error);
+          }
         }
 
         setForm({
           tipo: data.type,
-          fechaCaducidad: data.expirationDate || "",
+          fechaCaducidad: normalizeExpirationDate(data.expirationDate),
           descripcion: data.description,
           cantidad: data.quantity,
           unidad: data.unit,
@@ -93,6 +146,7 @@ const EditDonation = () => {
           lng: data.location?.lng || null,
           estado: data.status || "Disponible",
         });
+
 
         setExistingImages(data.images || []);
       } catch (err) {
@@ -226,7 +280,7 @@ const EditDonation = () => {
         description: form.descripcion,
         quantity: form.cantidad,
         unit: form.unidad,
-        expirationDate: form.fechaCaducidad,
+        expirationDate: form.fechaCaducidad, 
         status: form.estado,
         location: {
           lat: form.lat,
@@ -444,7 +498,7 @@ const EditDonation = () => {
                 <Heart className="text-[#826c43]" /> Estado
               </h2>
 
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {["Disponible", "Pendiente", "Entregada", "Cancelada"].map((estado) => (
                   <label
                     key={estado}

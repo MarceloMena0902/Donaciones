@@ -17,6 +17,7 @@ const ProfileView = () => {
   const { user, loading } = useAuth();
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // 🔥 TODOS LOS USESTATE VAN AQUÍ ARRIBA ‼️
   const [profile, setProfile] = useState<any | null>(null);
   const [originalProfile, setOriginalProfile] = useState<any | null>(null);
 
@@ -38,19 +39,44 @@ const ProfileView = () => {
   });
 
   const [newAvatarFile, setNewAvatarFile] = useState<File | null>(null);
-    useEffect(() => {
+
+  // 🔥 Estos *DEBEN* ir antes del useEffect que los usa
+  const [passwordErrors, setPasswordErrors] = useState({
+    length: false,
+    upper: false,
+    lower: false,
+    number: false,
+    special: false,
+  });
+
+  const [passMatch, setPassMatch] = useState<boolean | null>(null);
+
+  // ✅ AHORA recién puede ir este useEffect
+  useEffect(() => {
     if (!showPassModal) {
-      // Vaciar los campos
       setPasswordData({
         oldPass: "",
         newPass: "",
         confirmPass: "",
       });
 
-      // Resetear verificación de contraseña actual
       setIsOldPassVerified(false);
+
+      setPasswordErrors({
+        length: false,
+        upper: false,
+        lower: false,
+        number: false,
+        special: false,
+      });
+
+      setPassMatch(null);
     }
   }, [showPassModal]);
+
+
+    
+
   // =====================================================
   // 🔥 CARGAR PERFIL DESDE BACKEND
   // =====================================================
@@ -219,6 +245,7 @@ const ProfileView = () => {
 
 
 
+
   // =====================================================
   // 🔥 VALIDAR CONTRASEÑA ACTUAL
   // =====================================================
@@ -252,43 +279,115 @@ const ProfileView = () => {
   };
 
   // =====================================================
-  // 🔥 CAMBIO DE CONTRASEÑA
+  //  CAMBIO DE CONTRASEÑA
   // =====================================================
-  const handlePasswordChange = async () => {
-    const auth = getAuth();
-    const currentUser = auth.currentUser;
+const handlePasswordChange = async () => {
+  const auth = getAuth();
+  const currentUser = auth.currentUser;
 
-    if (!currentUser)
-      return Swal.fire("Error", "No estás autenticado", "error");
+  if (!currentUser) {
+    return Swal.fire("Error", "No estás autenticado", "error");
+  }
 
-    if (!isOldPassVerified)
-      return Swal.fire("Error", "Debes validar la contraseña actual", "error");
+  if (!isOldPassVerified) {
+    return Swal.fire("Error", "Debes validar la contraseña actual", "error");
+  }
 
-    if (passwordData.newPass !== passwordData.confirmPass) {
-      return Swal.fire("Error", "Las contraseñas no coinciden", "error");
-    }
+  if (
+    !passwordErrors.length ||
+    !passwordErrors.upper ||
+    !passwordErrors.lower ||
+    !passwordErrors.number ||
+    !passwordErrors.special
+  ) {
+    return Swal.fire(
+      "Error",
+      "La nueva contraseña no cumple los requisitos",
+      "error"
+    );
+  }
 
-    try {
-      await updatePassword(currentUser, passwordData.newPass);
+  if (passwordData.newPass !== passwordData.confirmPass) {
+    return Swal.fire("Error", "Las contraseñas no coinciden", "error");
+  }
 
-      Swal.fire({
-        icon: "success",
-        title: "Contraseña actualizada",
-        timer: 1500,
-        showConfirmButton: false,
-      });
+  try {
+    // 🔥 1. Cambiar contraseña
+    await updatePassword(currentUser, passwordData.newPass);
 
-      setShowPassModal(false);
-      setIsOldPassVerified(false);
-      setPasswordData({ oldPass: "", newPass: "", confirmPass: "" });
+    // 🔥 2. Mostrar éxito COMPLETO antes del logout automático
+    await Swal.fire({
+      icon: "success",
+      title: "Contraseña actualizada",
+      text: "Vuelve a iniciar sesión con tu nueva contraseña.",
+      timer: 1400,
+      showConfirmButton: false,
+    });
 
-    } catch (error) {
-      Swal.fire("Error", "No se pudo actualizar la contraseña", "error");
-    }
+    // 🔥 3. Cerrar sesión manual (evita errores de UI por estado desincronizado)
+    await auth.signOut();
+
+    // 🔥 4. Redirigir manualmente después del modal
+    window.location.href = "/login";
+
+  } catch (error) {
+    console.error(error);
+    Swal.fire("Error", "No se pudo actualizar la contraseña", "error");
+  }
+};
+
+  //  Validación en tiempo real de la nueva contraseña
+const validateNewPassword = (value: string) => {
+  // No permitir espacios
+  if (/\s/.test(value)) return; 
+
+  const validations = {
+    length: value.length >= 8,
+    upper: /[A-Z]/.test(value),
+    lower: /[a-z]/.test(value),
+    number: /[0-9]/.test(value),
+    special: /[^A-Za-z0-9]/.test(value),
   };
-  
+
+  setPasswordErrors(validations);
+
+  setPasswordData((prev) => ({
+    ...prev,
+    newPass: value,
+  }));
+
+  // Validar coincidencia con confirmación
+  setPassMatch(
+    value.length > 0 && passwordData.confirmPass.length > 0
+      ? value === passwordData.confirmPass
+      : null
+  );
+};
+
+//  Validación de confirmación
+const validateConfirmPassword = (value: string) => {
+  setPasswordData((prev) => ({ ...prev, confirmPass: value }));
+
+  setPassMatch(value === passwordData.newPass);
+};
+const handleEnterKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+  if (e.key !== "Enter") return;
+
+  // Si AÚN no se validó → validar primero
+  if (!isOldPassVerified) {
+    if (passwordData.oldPass.trim().length > 0) {
+      verifyOldPassword();
+    }
+    return;
+  }
+
+  // Si YA se validó → intentar guardar
+  handlePasswordChange();
+};
+
+
   // =====================================================
-  // 🔥 UI COMPLETO
+  //  UI COMPLETO
   // =====================================================
   return (
     <div className="min-h-screen bg-[#f5efe7] pb-20 relative">
@@ -445,11 +544,29 @@ const ProfileView = () => {
       {showPassModal && (
         <div
           className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center px-4 z-50"
-          onClick={() => setShowPassModal(false)}
+          onMouseDown={(e) =>{if (e.target === e.currentTarget) setShowPassModal(false)}}
         >
           <div
             className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-8 border relative"
-            onClick={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+
+              e.preventDefault();
+              e.stopPropagation();
+
+              if (!isOldPassVerified) {
+                // Solo validar si el campo NO está vacío
+                if (passwordData.oldPass.trim().length > 0) {
+                  verifyOldPassword();
+                }
+                return;
+              }
+
+              // Ya verificada → intentar guardar
+              handlePasswordChange();
+            }}
+            tabIndex={0}
           >
             <button
               className="absolute top-4 right-4 text-gray-500 hover:text-red-500"
@@ -475,15 +592,22 @@ const ProfileView = () => {
                     oldPass: e.target.value,
                   }))
                 }
+                disabled={isOldPassVerified}
                 className="w-full px-4 py-3 rounded-xl border border-[#e4d7c5] shadow-sm"
               />
 
               <button
                 onClick={verifyOldPassword}
-                className="w-full py-2 rounded-xl bg-[#826c43] text-white font-semibold hover:scale-105 transition"
+                disabled={isOldPassVerified}
+                className={`w-full py-2 rounded-xl font-semibold transition 
+                  ${isOldPassVerified 
+                    ? "bg-gray-300 text-gray-500 cursor-not-allowed"
+                    : "bg-[#826c43] text-white hover:scale-105"}
+                `}
               >
                 Validar contraseña actual
               </button>
+
 
               {/* Nueva contraseña */}
               <input
@@ -492,14 +616,32 @@ const ProfileView = () => {
                 disabled={!isOldPassVerified}
                 style={{ opacity: isOldPassVerified ? 1 : 0.4 }}
                 value={passwordData.newPass}
-                onChange={(e) =>
-                  setPasswordData((prev) => ({
-                    ...prev,
-                    newPass: e.target.value,
-                  }))
-                }
+                onChange={(e) => validateNewPassword(e.target.value)}
                 className="w-full px-4 py-3 rounded-xl border border-[#e4d7c5] shadow-sm"
               />
+
+              {/* Indicadores en tiempo real */}
+              {isOldPassVerified && passwordData.newPass.length > 0 && (
+                <div className="mt-2 text-sm space-y-1">
+                  <p className={passwordErrors.length ? "text-green-600" : "text-red-600"}>
+                    • Mínimo 8 caracteres
+                  </p>
+                  <p className={passwordErrors.upper ? "text-green-600" : "text-red-600"}>
+                    • Una letra mayúscula
+                  </p>
+                  <p className={passwordErrors.lower ? "text-green-600" : "text-red-600"}>
+                    • Una letra minúscula
+                  </p>
+                  <p className={passwordErrors.number ? "text-green-600" : "text-red-600"}>
+                    • Un número
+                  </p>
+                  <p className={passwordErrors.special ? "text-green-600" : "text-red-600"}>
+                    • Un carácter especial (!, @, #, &, %, etc.)
+                  </p>
+                </div>
+              )}
+
+
 
               {/* Confirmar */}
               <input
@@ -508,16 +650,22 @@ const ProfileView = () => {
                 disabled={!isOldPassVerified}
                 style={{ opacity: isOldPassVerified ? 1 : 0.4 }}
                 value={passwordData.confirmPass}
-                onChange={(e) =>
-                  setPasswordData((prev) => ({
-                    ...prev,
-                    confirmPass: e.target.value,
-                  }))
-                }
+                onChange={(e) => validateConfirmPassword(e.target.value)}
                 className="w-full px-4 py-3 rounded-xl border border-[#e4d7c5] shadow-sm"
               />
 
+              {/* Indicador en tiempo real */}
+              {passMatch === false && (
+                <p className="text-red-600 text-sm mt-1">Las contraseñas no coinciden</p>
+              )}
+
+              {passMatch === true && (
+                <p className="text-green-600 text-sm mt-1">Las contraseñas coinciden</p>
+              )}
+
+
               <button
+                type="button"
                 onClick={handlePasswordChange}
                 disabled={!isOldPassVerified}
                 className={`w-full mt-4 flex items-center justify-center gap-2 px-6 py-3 rounded-xl font-semibold shadow transition 
@@ -530,6 +678,7 @@ const ProfileView = () => {
               >
                 Guardar Contraseña
               </button>
+
             </div>
           </div>
         </div>

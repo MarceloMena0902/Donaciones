@@ -197,23 +197,25 @@ const NavbarLogged = () => {
 
     const chatId = `${donationId}_${requesterId}_${donorId}`;
     const chatRef = doc(firestoreDb, "chats", chatId);
+    const laPazDate = new Date().toLocaleString("en-CA", { timeZone: "America/La_Paz" }).split(",")[0];
 
     const existing = await getDocs(
       query(collection(firestoreDb, "chats"), where("chatId", "==", chatId))
     );
 
     if (existing.empty) {
-      await setDoc(chatRef, {
-        chatId,
-        donationId,
-        participants: [donorId, requesterId],
-        names: {
-          requester: requesterName || "Usuario",
-          donor: user.displayName || "Donante",
-        },
-        createdAt: serverTimestamp(),
-        unreadFor: [requesterId],
-      });
+    await setDoc(chatRef, {
+      chatId,
+      donationId,
+      participants: [donorId, requesterId],
+      names: {
+        requester: requesterName || "Usuario",
+        donor: user.displayName || "Donante",
+      },
+      createdAt: laPazDate,     // <-- FECHA LOCAL CORRECTA
+      createdAtRaw: serverTimestamp(), // Opcional, si quieres mantener timestamp
+      unreadFor: [requesterId],
+    });
 
       await addDoc(collection(firestoreDb, "chats", chatId, "messages"), {
         senderId: requesterId,
@@ -287,6 +289,37 @@ const NavbarLogged = () => {
 
     return () => unsub();
   }, [user?.uid]);
+  // =====================
+// NO NOTIFICAR SI ESTOY DENTRO DE UN CHAT
+// =====================
+useEffect(() => {
+  if (!user?.uid) return;
+
+  const q = query(
+    collection(firestoreDb, "chats"),
+    where("participants", "array-contains", user.uid)
+  );
+
+  const unsub = onSnapshot(q, (snapshot) => {
+    let unread = false;
+    let currentChatId = window.location.pathname.startsWith("/chat/")
+      ? window.location.pathname.replace("/chat/", "")
+      : null;
+
+    snapshot.forEach((docSnap) => {
+      const data = docSnap.data();
+
+      // si el mensaje es del chat en el que YA estoy → NO notificar
+      if (currentChatId === docSnap.id) return;
+
+      if (data.unreadFor?.includes(user.uid)) unread = true;
+    });
+
+    setHasUnreadChats(unread);
+  });
+
+  return () => unsub();
+}, [user?.uid]);
 
   // =====================
   // UI FINAL
@@ -311,7 +344,32 @@ const NavbarLogged = () => {
             </button>
 
             {notifOpen && (
-              <div className="absolute right-0 mt-3 w-80 bg-white rounded-xl shadow-xl border border-[#e5dacb] p-4 animate-fadeIn">
+            <div
+              className="
+                fixed           /* MÓVIL → flotante estable */
+                top-20
+                left-1/2
+                -translate-x-1/2
+                w-[90vw]
+                max-w-sm
+                z-[9999]
+                bg-white
+                rounded-2xl
+                shadow-2xl
+                border border-[#e5dacb]
+                p-4
+                animate-fadeIn
+
+                sm:absolute     /* DESKTOP → vuelve a derecha */
+                sm:top-14
+                sm:left-auto
+                sm:right-0
+                sm:translate-x-0
+                sm:w-80
+                sm:max-w-none
+              "
+            >
+
                 <h4 className="text-sm font-semibold text-gray-700 mb-3">Notificaciones</h4>
 
                 <div className="max-h-72 overflow-y-auto space-y-3 pr-1">
@@ -328,7 +386,9 @@ const NavbarLogged = () => {
                         }}
                         className="p-3 rounded-xl border border-[#e5dacb] bg-[#f8f4ed] shadow-sm cursor-pointer hover:bg-[#efe9e0] transition"
                       >
-                        <p className="text-[#4a4a4a] font-medium text-sm">{n.message}</p>
+                        <p className="text-[#4a4a4a] font-medium text-sm break-words whitespace-normal">
+                          {n.message}
+                        </p>
                         <p className="text-xs text-gray-500">{n.date}</p>
                       </div>
                     ))

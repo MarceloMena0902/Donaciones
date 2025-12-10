@@ -2,7 +2,54 @@ import { db } from "../config/firebase.js";
 import admin from "firebase-admin";
 
 // ======================================================
-// CREAR DONACIÓN (optimizado para registrar el ID en users/{uid})
+// Helpers de fecha
+// ======================================================
+const normalizeExpiration = (expirationDate) => {
+  if (!expirationDate) return null;
+
+  // Caso: viene solo "YYYY-MM-DD" desde el front
+  if (/^\d{4}-\d{2}-\d{2}$/.test(expirationDate)) {
+    // válido TODO el día en Bolivia
+    return new Date(expirationDate + "T23:59:59-04:00");
+  }
+
+  // Caso: viene completo con hora
+  return new Date(expirationDate);
+};
+
+// 👉 NUEVO: formatear lo que se envía al cliente
+const formatExpirationForClient = (exp) => {
+  if (!exp) return null;
+
+  let dateObj;
+
+  if (exp instanceof admin.firestore.Timestamp) {
+    dateObj = exp.toDate();
+  } else if (exp instanceof Date) {
+    dateObj = exp;
+  } else {
+    // ya es string tipo "2025-12-09" → lo devolvemos tal cual
+    return exp;
+  }
+
+  const laPazString = dateObj.toLocaleDateString("en-CA", {
+    timeZone: "America/La_Paz",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+
+  // "2025-12-09"
+  return laPazString.slice(0, 10);
+};
+
+// ======================================================
+// FUNCIÓN REUTILIZABLE — NORMALIZAR FECHA A UTC-4
+// ======================================================
+
+
+// ======================================================
+// CREAR DONACIÓN
 // ======================================================
 export const createDonation = async (req, res) => {
   try {
@@ -21,10 +68,7 @@ export const createDonation = async (req, res) => {
       return res.status(400).json({ error: "Faltan datos obligatorios para la donación." });
     }
 
-    // ⏰ Ajuste de zona horaria Bolivia (UTC-4)
-    const expirationLocal = expirationDate
-      ? new Date(expirationDate + "T23:59:59-04:00")
-      : null;
+    const expirationLocal = normalizeExpiration(expirationDate);
 
     const donationRef = await db.collection("donations").add({
       userId,
@@ -40,6 +84,7 @@ export const createDonation = async (req, res) => {
       updatedAt: new Date(),
     });
 
+    // Registrar ID en el usuario
     await db.collection("users").doc(userId).set(
       {
         donations: admin.firestore.FieldValue.arrayUnion(donationRef.id),
@@ -50,10 +95,10 @@ export const createDonation = async (req, res) => {
     res.status(201).json({ id: donationRef.id, message: "Donación registrada correctamente." });
 
   } catch (error) {
+    console.error("❌ ERROR CREATE:", error);
     res.status(500).json({ error: error.message });
   }
 };
-
 
 // ======================================================
 // OBTENER TODAS LAS DONACIONES
@@ -61,16 +106,22 @@ export const createDonation = async (req, res) => {
 export const getDonations = async (req, res) => {
   try {
     const snapshot = await db.collection("donations").get();
-    const donations = snapshot.docs.map(doc => ({
-      id: doc.id,
-      ...doc.data(),
-    }));
+
+    const donations = snapshot.docs.map((docSnap) => {
+      const data = docSnap.data();
+      return {
+        id: docSnap.id,
+        ...data,
+        expirationDate: formatExpirationForClient(data.expirationDate),
+      };
+    });
 
     res.status(200).json(donations);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
+
 
 // ======================================================
 // OBTENER DONACIÓN POR ID
@@ -84,12 +135,18 @@ export const getDonationById = async (req, res) => {
       return res.status(404).json({ error: "Donación no encontrada." });
     }
 
-    res.status(200).json({ id: docSnap.id, ...docSnap.data() });
+    const data = docSnap.data();
 
+    res.status(200).json({
+      id: docSnap.id,
+      ...data,
+      expirationDate: formatExpirationForClient(data.expirationDate),
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 };
+
 
 // ======================================================
 // ACTUALIZAR DONACIÓN
@@ -115,9 +172,7 @@ export const updateDonation = async (req, res) => {
       return res.status(404).json({ error: "Donación no encontrada." });
     }
 
-    const expirationLocal = expirationDate
-      ? new Date(expirationDate + "T23:59:59-04:00")
-      : null;
+    const expirationLocal = normalizeExpiration(expirationDate);
 
     await donationRef.update({
       type,
@@ -134,10 +189,10 @@ export const updateDonation = async (req, res) => {
     res.status(200).json({ message: "Donación actualizada correctamente." });
 
   } catch (error) {
+    console.error("❌ ERROR UPDATE:", error);
     res.status(500).json({ error: error.message });
   }
 };
-
 
 // ======================================================
 // ELIMINAR DONACIÓN
@@ -158,19 +213,16 @@ export const deleteDonation = async (req, res) => {
 };
 
 // ======================================================
-// 🔥 GET DONATIONS BY USER — ULTRA OPTIMIZADO
+// 🔥 GET DONATIONS BY USER — OPTIMIZADO
 // ======================================================
 export const getDonationsByUser = async (req, res) => {
   try {
     const { userId } = req.params;
 
     if (!userId) {
-      return res.status(400).json({
-        error: "Faltan parámetros: userId es obligatorio."
-      });
+      return res.status(400).json({ error: "Faltan parámetros: userId es obligatorio." });
     }
 
-    // 1️⃣ Leer SOLO el usuario (1 lectura)
     const userSnap = await db.collection("users").doc(userId).get();
 
     if (!userSnap.exists) {
@@ -183,7 +235,7 @@ export const getDonationsByUser = async (req, res) => {
       return res.status(200).json([]);
     }
 
-    // 2️⃣ Firestore solo permite "in" con máximo 10 IDs
+    // Dividir en paquetes de máximo 10 IDs (límite Firestore)
     const chunks = [];
     for (let i = 0; i < donationIds.length; i += 10) {
       chunks.push(donationIds.slice(i, i + 10));
@@ -191,25 +243,26 @@ export const getDonationsByUser = async (req, res) => {
 
     const results = [];
 
-    // 3️⃣ Hacer consultas por bloques de 10
     for (const chunk of chunks) {
       const snap = await db
         .collection("donations")
         .where(admin.firestore.FieldPath.documentId(), "in", chunk)
         .get();
 
-      snap.forEach(doc => {
-        results.push({
-          id: doc.id,
-          ...doc.data(),
+        snap.forEach((docSnap) => {
+          const data = docSnap.data();
+          results.push({
+            id: docSnap.id,
+            ...data,
+            expirationDate: formatExpirationForClient(data.expirationDate),
+          });
         });
-      });
     }
 
     res.status(200).json(results);
 
   } catch (error) {
-    console.log("❌ ERROR en getDonationsByUser:", error);
+    console.error("❌ ERROR getDonationsByUser:", error);
     res.status(500).json({ error: error.message });
   }
 };

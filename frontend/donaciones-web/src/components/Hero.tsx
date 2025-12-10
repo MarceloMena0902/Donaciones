@@ -49,25 +49,25 @@ const Hero = () => {
             <img src="/donacion1.png" alt="Donaciones" className="w-full h-full object-contain p-4" />
           </div>
 
-          <div className="absolute -top-20 animate-float">
+          <div className="hidden md:block absolute -top-20 animate-float">
             <div className="bg-white shadow-md p-4 rounded-full">
               <Heart size={26} className="text-[#826c43]" />
             </div>
           </div>
 
-          <div className="absolute right-0 top-20 animate-floatFast">
+          <div className="hidden md:block absolute right-0 top-20 animate-floatFast">
             <div className="bg-white shadow-md p-4 rounded-full">
               <Users size={26} className="text-[#826c43]" />
             </div>
           </div>
 
-          <div className="absolute left-0 top-28 animate-floatSlow">
+          <div className="hidden md:block absolute left-0 top-28 animate-floatSlow">
             <div className="bg-white shadow-md p-4 rounded-full">
               <Globe size={26} className="text-[#826c43]" />
             </div>
           </div>
 
-          <div className="absolute -bottom-20 animate-float">
+          <div className="hidden md:block absolute -bottom-20 animate-float">
             <div className="bg-white shadow-md p-4 rounded-full">
               <Star size={26} className="text-[#826c43]" />
             </div>

@@ -66,7 +66,6 @@ const navigate = useNavigate();
       {/* MENU MOBILE */}
       {open && (
         <div className="md:hidden flex flex-col px-10 pb-4 gap-4 bg-[#f4ecdf] border-t border-[#d4c7b6]">
-          
           <Link
             to="/mapa-donantes"
             className="text-gray-700 font-medium hover:text-[#826c43]"
@@ -75,20 +74,26 @@ const navigate = useNavigate();
             MapaDonantes
           </Link>
 
-          <button className="bg-[#826c43] text-white px-6 py-2 rounded-lg shadow hover:bg-[#6d5938]">
+          <button
+            onClick={() => {
+              navigate("/login");
+              setOpen(false);
+            }}
+            className="bg-[#826c43] text-white px-6 py-2 rounded-lg shadow hover:bg-[#6d5938]"
+          >
             INICIAR SESIÓN
           </button>
 
           <Link
-            to="/crear-cuenta"
+            to="/register"               // 👈 MISMA RUTA QUE EN DESKTOP
             className="text-[#0c8f32] font-semibold hover:text-[#0a7329]"
             onClick={() => setOpen(false)}
           >
             CREAR CUENTA
           </Link>
-
         </div>
       )}
+
     </nav>
   );
 };

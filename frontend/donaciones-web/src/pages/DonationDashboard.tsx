@@ -16,6 +16,48 @@ import { useAuth } from "../context/AuthContext";
 import axios from "axios";
 
 const API_URL = "http://localhost:4000/api/donations";
+type FirestoreTimestamp = {
+  _seconds: number;
+  _nanoseconds: number;
+};
+// Convierte segundos UNIX (UTC) a fecha "YYYY-MM-DD" en horario de Bolivia (UTC-4)
+const toBoliviaDateString = (seconds: number): string => {
+  const utcMs = seconds * 1000;
+
+  // Bolivia = UTC-4  → desplazamos -4 horas
+  const boliviaOffsetMinutes = -4 * 60;
+  const boliviaMs = utcMs + boliviaOffsetMinutes * 60 * 1000;
+
+  const d = new Date(boliviaMs);
+
+  const year = d.getUTCFullYear();
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`; // "YYYY-MM-DD"
+};
+
+const normalizeExpiration = (exp: any): string => {
+  if (!exp) return "";
+
+  if (typeof exp === "string") {
+    // "2025-12-09" o "2025-12-09T04:00:00.000Z"
+    return exp.slice(0, 10);
+  }
+
+  if (
+    typeof exp === "object" &&
+    exp !== null &&
+    "_seconds" in exp &&
+    typeof (exp as FirestoreTimestamp)._seconds === "number"
+  ) {
+    const seconds = (exp as FirestoreTimestamp)._seconds;
+    return toBoliviaDateString(seconds); // 👈 ahora respeta UTC-4
+  }
+
+  return "";
+};
+
 
 const DonationDashboard = () => {
   const { user } = useAuth();
@@ -37,14 +79,27 @@ const DonationDashboard = () => {
         // ===========================
         //   ⛔ FILTRAR DONACIONES VENCIDAS
         // ===========================
-        const hoyString = new Date().toLocaleDateString("en-CA"); // 2025-12-09
+        // ===========================
+        //   ⛔ FILTRAR DONACIONES VENCIDAS (BOLIVIA)
+        // ===========================
+        const hoyString = new Date().toLocaleDateString("en-CA", {
+          timeZone: "America/La_Paz",
+        }); // ej: "2025-12-10"
 
         const activas = (res.data || []).filter((d: any) => {
-          return !d.expirationDate || d.expirationDate >= hoyString;
+          // Sin fecha de caducidad → la dejamos
+          if (!d.expirationDate) return true;
+
+          const expStr = normalizeExpiration(d.expirationDate);
+          if (!expStr) return true;
+
+          // Solo mantener donaciones cuya fecha de caducidad
+          // sea HOY o una fecha futura
+          return expStr >= hoyString;
         });
 
-
         setDonaciones(activas);
+
 
       } catch (err) {
         console.log("❌ Error cargando donaciones:", err);
@@ -75,22 +130,32 @@ const DonationDashboard = () => {
             <div className="bg-white rounded-2xl shadow-md p-10 border border-[#e5dacb] mb-10 relative overflow-hidden">
               <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#826c43] to-[#e66748]" />
               <h2 className="text-xl">Bienvenido, {user?.displayName}</h2>
-              <h1 className="text-4xl font-extrabold text-gray-800 flex items-center gap-3">
+              <h1 className="text-3xl md:text-4xl font-extrabold text-gray-800 flex items-center gap-3">
                 <Heart className="text-[#826c43] w-10 h-10" />
                 Mis Donaciones
                 
               </h1>
 
-              <p className="text-gray-600 mt-2 text-lg">
+              <p className="text-gray-600 mt-2 md:mt-2 text-base md:text-lg">
                 Gestiona y administra tus donaciones de alimentos
               </p>
 
               <Link
                 to="/crear-donacion"
-                className="absolute right-10 top-10 bg-gradient-to-r from-[#826c43] to-[#e66748] text-white px-6 py-3 rounded-xl shadow-md hover:scale-[1.03] transition-all flex items-center gap-2 font-semibold"
+                className="
+                  mt-6                   /* margen arriba en móvil */
+                  w-full sm:w-auto       /* ocupa todo el ancho en pantallas muy pequeñas */
+                  md:mt-0                /* quita margen en desktop */
+                  md:absolute md:right-10 md:top-10  /* absoluto solo desde md */
+                  bg-gradient-to-r from-[#826c43] to-[#e66748]
+                  text-white px-6 py-3 rounded-xl shadow-md
+                  hover:scale-[1.03] transition-all
+                  flex items-center justify-center gap-2 font-semibold
+                "
               >
                 <Plus size={18} /> NUEVA DONACIÓN
               </Link>
+
             </div>
 
             {/* ESTADÍSTICAS */}
@@ -144,20 +209,43 @@ const DonationDashboard = () => {
 
                         <p className="text-gray-700 font-semibold">{d.quantity} {d.unit}</p>
 
-                        <div className="flex gap-2 justify-between mt-3">
-                          <Link to={`/donation/${d.id}`} className="flex-1 flex items-center justify-center gap-2 bg-blue-500 text-white px-3 py-2 rounded-lg hover:scale-[1.03] transition">
-                            <Eye size={18} /> Ver
-                          </Link>
+                        <div className="flex flex-col sm:flex-row gap-2 mt-3">
+                        <Link
+                          to={`/donation/${d.id}`}
+                          className="
+                            w-full sm:flex-1
+                            flex items-center justify-center gap-2
+                            bg-blue-500 text-white px-3 py-2 rounded-lg
+                            hover:scale-[1.03] transition
+                          "
+                        >
+                          <Eye size={18} /> Ver
+                        </Link>
 
-                          <Link to={`/donations/${d.id}/editar`} className="flex-1 flex items-center justify-center gap-2 bg-yellow-500 text-white px-3 py-2 rounded-lg hover:scale-[1.03] transition">
-                            <Edit size={18} /> Editar
-                          </Link>
+                        <Link
+                          to={`/donations/${d.id}/editar`}
+                          className="
+                            w-full sm:flex-1
+                            flex items-center justify-center gap-2
+                            bg-yellow-500 text-white px-3 py-2 rounded-lg
+                            hover:scale-[1.03] transition
+                          "
+                        >
+                          <Edit size={18} /> Editar
+                        </Link>
 
-                          <Link to={`/donations/${d.id}/eliminar`} className="flex-1 flex items-center justify-center gap-2 bg-red-500 text-white px-3 py-2 rounded-lg hover:scale-[1.03] transition">
-                            <Trash2 size={18} /> Eliminar
-                          </Link>
-                        </div>
-
+                        <Link
+                          to={`/donations/${d.id}/eliminar`}
+                          className="
+                            w-full sm:flex-1
+                            flex items-center justify-center gap-2
+                            bg-red-500 text-white px-3 py-2 rounded-lg
+                            hover:scale-[1.03] transition
+                          "
+                        >
+                          <Trash2 size={18} /> Eliminar
+                        </Link>
+                      </div>
                       </div>
                     ))}
                   </div>

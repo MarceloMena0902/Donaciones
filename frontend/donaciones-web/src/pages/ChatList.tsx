@@ -11,6 +11,45 @@ import {
   deleteDoc,
   doc,
 } from "firebase/firestore";
+type FirestoreTimestamp = {
+  _seconds: number;
+  _nanoseconds: number;
+};
+const toBoliviaDateString = (seconds: number): string => {
+  const utcMs = seconds * 1000;
+
+  // Bolivia = UTC-4  → desplazamos -4 horas
+  const boliviaOffsetMinutes = -4 * 60;
+  const boliviaMs = utcMs + boliviaOffsetMinutes * 60 * 1000;
+
+  const d = new Date(boliviaMs);
+
+  const year = d.getUTCFullYear();
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`; // "YYYY-MM-DD"
+};
+
+const normalizeExpiration = (exp: any): string => {
+  if (!exp) return "";
+
+  if (typeof exp === "string") {
+    // "2025-12-09" o "2025-12-09T04:00:00.000Z"
+    return exp.slice(0, 10);
+  }
+
+  if (
+    typeof exp === "object" &&
+    exp !== null &&
+    "_seconds" in exp &&
+    typeof (exp as FirestoreTimestamp)._seconds === "number"
+  ) {
+    const seconds = (exp as FirestoreTimestamp)._seconds;
+    return toBoliviaDateString(seconds);
+  }
+  return "";
+};
 
 const USERS_API = "http://localhost:4000/api/users";
 const DONATION_API = "http://localhost:4000/api/donations";
@@ -55,27 +94,65 @@ const ChatList = () => {
           continue;
         }
 
-        // ============================
-        // 2️⃣ Revisar si está vencida
-        // ============================
-        const expiration = new Date(donation.expirationDate);
-        const isExpired = expiration < new Date();
 
-        if (isExpired) {
-          console.log("🔥 Eliminando chat vencido:", chatId);
+      // ============================
+      // 2️⃣ Revisar si está vencida (versión robusta)
+      // ============================
+      let isExpired = false;
 
-          // eliminar mensajes primero
-          const msgRef = collection(firestoreDb, "chats", chatDocId, "messages");
-          const msgSnap = await getDocs(msgRef);
+      // Normalizamos siempre la fecha de expiración a "YYYY-MM-DD"
+      const expStr = normalizeExpiration(donation.expirationDate);
 
-          for (const m of msgSnap.docs) {
-            await deleteDoc(doc(firestoreDb, "chats", chatDocId, "messages", m.id));
-          }
+      if (expStr) {
+        // Hoy en Bolivia (UTC-4), también como "YYYY-MM-DD"
+        const todayStr = new Date().toLocaleDateString("en-CA", {
+          timeZone: "America/La_Paz",
+        });
 
-          // eliminar el chat
-          await deleteDoc(doc(firestoreDb, "chats", chatDocId));
-          continue; // no se agrega a la lista
+        // Como ambos son "YYYY-MM-DD", se pueden comparar como strings
+        isExpired = expStr < todayStr;
+      }
+
+      //aqui se esta borrando
+      if (isExpired) {
+        console.log("🔥 Eliminando chat vencido:", chatId);
+
+        // eliminar mensajes primero
+        const msgRef = collection(firestoreDb, "chats", chatDocId, "messages");
+        const msgSnap = await getDocs(msgRef);
+
+        for (const m of msgSnap.docs) {
+          await deleteDoc(doc(firestoreDb, "chats", chatDocId, "messages", m.id));
         }
+
+        // eliminar el chat
+        await deleteDoc(doc(firestoreDb, "chats", chatDocId));
+        continue;
+      }
+
+//
+// if (donation.expirationDate) {
+
+//   const today = new Date();
+//   today.setHours(0, 0, 0, 0);
+
+//   const exp = new Date(donation.expirationDate + "T00:00:00");
+//   exp.setHours(0, 0, 0, 0);
+
+//   const isExpired = exp < today;
+
+//   console.log("📌 --- CHEQUEO DE EXPIRACIÓN ---");
+//   console.log("Chat ID:", chatId);
+//   console.log("Expiration RAW:", donation.expirationDate);
+//   console.log("Expiration interpretada:", exp.toString());
+//   console.log("Hoy:", today.toString());
+//   console.log("¿Expirada?:", isExpired);
+//   console.log("-------------------------------");
+
+//   // ❌ NO ELIMINAR NADA POR AHORA
+//   // if (isExpired) continue;
+// }
+
 
         // ============================
         // 3️⃣ Obtener usuario del otro lado
@@ -159,7 +236,7 @@ const ChatList = () => {
               <div
                 key={chat.chatId}
                 onClick={() => navigate(`/chat/${chat.chatDocId}`)}
-                className={`relative w-full p-5 flex items-center gap-6 border rounded-2xl shadow 
+                className={`w-full p-5 flex flex-col sm:flex-row items-start sm:items-center gap-4 sm:gap-6 border rounded-2xl shadow 
                 cursor-pointer transition-all duration-200
                 ${
                   chat.hasUnread
@@ -173,10 +250,22 @@ const ChatList = () => {
                   donorImg={chat.donorPhoto}
                 />
 
-                <p className="text-xl font-semibold">{chat.donationName+" / "+ chat.donorName+" / "+chat.requesterName}</p>
+                <p className="text-xl font-semibold">
+                  {chat.donationName+" / "+ chat.donorName+" / "+chat.requesterName}
+                </p>
 
                 {chat.hasUnread && (
-                  <span className="absolute right-4 bg-red-500 text-white text-xs px-3 py-1 rounded-full shadow-md">
+                  <span
+                    className="
+                      mt-2 sm:mt-0
+                      sm:ml-auto
+                      px-3 py-1
+                      bg-red-500 text-white
+                      text-xs sm:text-[11px]
+                      rounded-full shadow-md
+                      self-start sm:self-auto
+                    "
+                  >
                     Mensajes sin leer
                   </span>
                 )}

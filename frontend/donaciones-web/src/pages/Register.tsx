@@ -27,6 +27,7 @@ const Register = () => {
   const [photo, setPhoto] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [photoName, setPhotoName] = useState("");
 
   // ============================
   // ERRORES POR CAMPO
@@ -54,7 +55,11 @@ const Register = () => {
 
   const validatePassword = (v: string) => {
     if (!v) return "La contraseña es obligatoria.";
-    if (v.length < 6) return "Debe tener mínimo 6 caracteres.";
+    if (v.length < 8) return "Debe tener mínimo 8 caracteres.";
+    if (!/[A-Z]/.test(v)) return "Debe incluir una letra mayúscula.";
+    if (!/[a-z]/.test(v)) return "Debe incluir una letra minúscula.";
+    if (!/[0-9]/.test(v)) return "Debe incluir un número.";
+    if (!/[^A-Za-z0-9]/.test(v)) return "Debe incluir un carácter especial.";
     return "";
   };
 
@@ -64,7 +69,8 @@ const Register = () => {
   };
 
   const validatePhone = (v: string) => {
-    if (v && v.length < 7) return "Número de teléfono no válido, debe tener 8 dígitos.";
+    if (v && v.length < 8)
+      return "Número de teléfono no válido, debe tener 8 dígitos.";
     return "";
   };
 
@@ -75,23 +81,42 @@ const Register = () => {
   };
 
   // ============================
+  // REGLAS DINÁMICAS CONTRASEÑA
+  // ============================
+  const [passwordRules, setPasswordRules] = useState({
+    length: false,
+    upper: false,
+    lower: false,
+    number: false,
+    special: false,
+  });
+
+  const [passMatch, setPassMatch] = useState<boolean | null>(null);
+
+  // ============================
   // PREVIEW FOTO
   // ============================
   const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+
     if (file) {
       setPhoto(file);
       setPreview(URL.createObjectURL(file));
+      setPhotoName(file.name);
+    } else {
+      setPhoto(null);
+      setPreview(null);
+      setPhotoName("");
     }
   };
 
+
   // ============================
-  // MANEJO SUBMIT
+  // --- SUBMIT ---
   // ============================
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    // Validaciones finales antes de enviar
     const newErrors = {
       name: validateName(name),
       email: validateEmail(email),
@@ -103,8 +128,24 @@ const Register = () => {
 
     setErrors(newErrors);
 
-    if (Object.values(newErrors).some((err) => err !== "")) {
+    if (Object.values(newErrors).some((e) => e !== "")) {
       Swal.fire("Error", "Por favor corrige los campos marcados.", "error");
+      return;
+    }
+
+    if (
+      !passwordRules.length ||
+      !passwordRules.upper ||
+      !passwordRules.lower ||
+      !passwordRules.number ||
+      !passwordRules.special
+    ) {
+      Swal.fire("Error", "La contraseña no cumple los requisitos.", "error");
+      return;
+    }
+
+    if (!passMatch) {
+      Swal.fire("Error", "Las contraseñas no coinciden.", "error");
       return;
     }
 
@@ -129,60 +170,78 @@ const Register = () => {
         icon: "success",
         confirmButtonColor: "#826c43",
       }).then(() => navigate("/login"));
-    } catch (error) {
-      Swal.fire("Error", "No se pudo completar el registro", "error");
+    } catch (err) {
+      Swal.fire("Error", "No se pudo completar el registro.", "error");
     } finally {
       setLoading(false);
     }
   };
 
   // ============================
-  // VALIDACIÓN EN TIEMPO REAL
+  // BLUR CONTROLADO (SIN DOBLES MENSAJES)
   // ============================
   const handleBlur = (field: string) => {
-    let value = "";
     let error = "";
 
-    switch (field) {
-      case "name":
-        value = name;
-        error = validateName(value);
-        break;
-
-      case "email":
-        value = email;
-        error = validateEmail(value);
-        break;
-
-      case "password":
-        value = password;
-        error = validatePassword(value);
-        // También validar confirmación si ya hay algo escrito
-        if (confirmPassword) {
-          setErrors((prev) => ({
-            ...prev,
-            confirmPassword: validateConfirmPassword(confirmPassword),
-          }));
-        }
-        break;
-
-      case "confirmPassword":
-        value = confirmPassword;
-        error = validateConfirmPassword(value);
-        break;
-
-      case "phone":
-        value = phone;
-        error = validatePhone(value);
-        break;
-
-      case "address":
-        value = address;
-        error = validateAddress(value);
-        break;
+    if (field === "password") {
+      if (password.length === 0) error = "La contraseña es obligatoria.";
     }
 
+    if (field === "confirmPassword") {
+      if (confirmPassword.length === 0)
+        error = "Debes confirmar tu contraseña.";
+    }
+
+    if (field === "name") error = validateName(name);
+    if (field === "email") error = validateEmail(email);
+    if (field === "phone") error = validatePhone(phone);
+    if (field === "address") error = validateAddress(address);
+
     setErrors((prev) => ({ ...prev, [field]: error }));
+  };
+
+  // ============================
+  // LIVE PASSWORD
+  // ============================
+  const validatePasswordLive = (value: string) => {
+    if (/\s/.test(value)) return;
+
+    const clean = value.trim();
+    setPassword(clean);
+
+    const checks = {
+      length: clean.length >= 8,
+      upper: /[A-Z]/.test(clean),
+      lower: /[a-z]/.test(clean),
+      number: /[0-9]/.test(clean),
+      special: /[^A-Za-z0-9]/.test(clean),
+    };
+
+    setPasswordRules(checks);
+
+    if (clean.length === 0) {
+      setPassMatch(null);
+      return;
+    }
+
+    if (confirmPassword.length > 0) {
+      setPassMatch(clean === confirmPassword);
+    }
+  };
+
+  // ============================
+  // LIVE CONFIRM PASSWORD
+  // ============================
+  const validateConfirmPasswordLive = (value: string) => {
+    const clean = value.trim();
+    setConfirmPassword(clean);
+
+    if (clean.length === 0) {
+      setPassMatch(null);
+      return;
+    }
+
+    setPassMatch(clean === password);
   };
 
   // ============================
@@ -230,9 +289,7 @@ const Register = () => {
           <div className="h-px bg-[#d6c7b7] flex-1" />
         </div>
 
-        {/* ============================
-            FORMULARIO
-        ============================ */}
+        {/* FORM */}
         <form className="space-y-6" onSubmit={handleSubmit}>
 
           {/* Nombre */}
@@ -267,34 +324,70 @@ const Register = () => {
           </Field>
 
           {/* Contraseña */}
-          <Field label="Contraseña" icon={<Lock size={20} className="text-[#826c43]" />} error={errors.password}>
+          <Field
+            label="Contraseña"
+            icon={<Lock size={20} className="text-[#826c43]" />}
+            error={errors.password}
+            disableError={true}   // 🔥 evita doble mensaje
+          >
             <input
               type="password"
               value={password}
-              onChange={(e) => setPassword(e.target.value.replace(/\s+/g, ""))}
+              onChange={(e) => validatePasswordLive(e.target.value)}
               onBlur={() => handleBlur("password")}
               placeholder="••••••••"
               className="input w-full"
             />
           </Field>
 
+
+          {/* Reglas dinámicas */}
+          {password.length > 0 && (
+            <div className="mt-2 text-sm space-y-1 ml-1">
+              <p className={passwordRules.length ? "text-green-600" : "text-red-600"}>• Mínimo 8 caracteres</p>
+              <p className={passwordRules.upper ? "text-green-600" : "text-red-600"}>• Una letra mayúscula</p>
+              <p className={passwordRules.lower ? "text-green-600" : "text-red-600"}>• Una letra minúscula</p>
+              <p className={passwordRules.number ? "text-green-600" : "text-red-600"}>• Un número</p>
+              <p className={passwordRules.special ? "text-green-600" : "text-red-600"}>• Un carácter especial (!, @, #, &, %, etc.)</p>
+            </div>
+          )}
+
+          {/* Error obligatorio */}
+          {errors.password && password.length === 0 && (
+            <p className="text-red-600 text-sm mt-1 ml-1">{errors.password}</p>
+          )}
+
           {/* Confirmar Contraseña */}
           <Field
             label="Confirmar Contraseña"
             icon={<Lock size={20} className="text-[#826c43]" />}
             error={errors.confirmPassword}
+            disableError={true}   // 🔥 evita doble mensaje
           >
             <input
               type="password"
               value={confirmPassword}
-              onChange={(e) =>
-                setConfirmPassword(e.target.value.replace(/\s+/g, ""))
-              }
+              onChange={(e) => validateConfirmPasswordLive(e.target.value)}
               onBlur={() => handleBlur("confirmPassword")}
               placeholder="Repite tu contraseña"
               className="input w-full"
             />
           </Field>
+
+
+          {/* Mensajes dinámicos */}
+          {confirmPassword.length > 0 && passMatch === false && (
+            <p className="text-red-600 text-sm mt-1 ml-1">Las contraseñas no coinciden</p>
+          )}
+
+          {confirmPassword.length > 0 && passMatch === true && (
+            <p className="text-green-600 text-sm mt-1 ml-1">Las contraseñas coinciden</p>
+          )}
+
+          {/* Obligatorio confirmación */}
+          {errors.confirmPassword && confirmPassword.length === 0 && (
+            <p className="text-red-600 text-sm mt-1 ml-1">{errors.confirmPassword}</p>
+          )}
 
           {/* Teléfono */}
           <Field label="Teléfono" icon={<Phone size={20} className="text-[#826c43]" />} error={errors.phone}>
@@ -326,14 +419,43 @@ const Register = () => {
               Foto de Perfil
             </label>
 
-            <div className="flex items-center gap-3 bg-white border border-[#dccdbb] rounded-xl px-4 py-3 shadow-sm">
-              <Image size={20} className="text-[#826c43]" />
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handleImage}
-                className="cursor-pointer"
-              />
+            <div
+              className="
+                flex flex-col sm:flex-row sm:items-center gap-2
+                bg-white border border-[#dccdbb]
+                rounded-xl px-4 py-3 shadow-sm
+              "
+            >
+              <div className="flex items-center gap-3">
+                <Image size={20} className="text-[#826c43]" />
+
+                {/* Botón custom + input oculto */}
+                <label className="cursor-pointer">
+                  <span
+                    className="
+                      inline-flex items-center justify-center
+                      px-4 py-2 rounded-lg
+                      border border-[#dccdbb]
+                      text-sm font-medium text-[#826c43]
+                      hover:bg-[#f5efe7] transition
+                    "
+                  >
+                    Elegir imagen
+                  </span>
+
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleImage}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              {/* Nombre del archivo (línea completa, sin corte) */}
+              <span className="text-xs text-gray-500 sm:ml-2 break-all">
+                {photoName || "Ninguna imagen seleccionada"}
+              </span>
             </div>
 
             {preview && (
@@ -366,20 +488,24 @@ const Register = () => {
 export default Register;
 
 // ============================
-// COMPONENTE FIELD ACTUALIZADO
+// COMPONENTE FIELD
 // ============================
-const Field = ({ label, icon, error, children }: any) => (
+const Field = ({ label, icon, error, children, disableError }: any) => (
   <div>
     <label className="block text-gray-700 font-medium mb-1">{label}</label>
 
     <div
       className={`flex items-center gap-3 bg-white border rounded-xl px-4 py-3 shadow-sm transition-all
-      ${error ? "border-red-500" : "border-[#dccdbb] focus-within:border-[#e66748]"}`}
+      ${error && !disableError ? "border-red-500" : "border-[#dccdbb] focus-within:border-[#e66748]"}`}
     >
       {icon}
       {children}
     </div>
 
-    {error && <p className="text-red-600 text-sm mt-1">{error}</p>}
+    {/* Mostrar error solo si disableError NO está activo */}
+    {!disableError && error && (
+      <p className="text-red-600 text-sm mt-1">{error}</p>
+    )}
   </div>
 );
+

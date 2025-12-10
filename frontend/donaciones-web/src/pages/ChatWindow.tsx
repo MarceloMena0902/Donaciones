@@ -307,19 +307,19 @@ const ChatWindow = () => {
     <div className="min-h-screen bg-[#f5efe7]">
       <NavbarLogged />
 
-      <div className="pt-24 pb-10 max-w-7xl mx-auto px-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="pt-24 pb-10 max-w-7xl mx-auto px-3 sm:px-6 grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
         
         {/* PANEL IZQUIERDO */}
-        <div className="col-span-1 bg-white rounded-3xl shadow-xl border p-5 flex flex-col gap-5 h-fit">
+        <div className="col-span-1 bg-white rounded-3xl shadow-xl border p-4 sm:p-5 flex flex-col gap-4 sm:gap-5 h-fit">
           <div className="flex items-center gap-3">
             <img
               src={
                 otherPhoto ||
                 "https://cdn-icons-png.flaticon.com/512/149/149071.png"
               }
-              className="w-12 h-12 rounded-full object-cover border"
+              className="w-10 h-10 sm:w-12 sm:h-12 rounded-full object-cover border"
             />
-            <h2 className="text-lg font-semibold">{otherName}</h2>
+            <h2 className="text-base sm:text-lg font-semibold">{otherName}</h2>
           </div>
 
           {donation && (
@@ -355,7 +355,7 @@ const ChatWindow = () => {
                 </div>
               )}
 
-              <div className="space-y-2 text-gray-800 text-sm">
+              <div className="space-y-1.5 text-gray-800 text-xs sm:text-sm">
                 <p>
                   <strong>Descripción:</strong> {donation.description}
                 </p>
@@ -377,14 +377,13 @@ const ChatWindow = () => {
         </div>
 
         {/* PANEL DERECHO */}
-        <div className="col-span-1 lg:col-span-2 bg-white rounded-3xl shadow-xl border p-6 flex flex-col h-[75vh]">
+        <div className="col-span-1 lg:col-span-2 bg-white rounded-3xl shadow-xl border p-4 sm:p-6 flex flex-col h-[70vh] sm:h-[75vh]">
           <h2 className="text-xl font-bold mb-3">
             Conversación con {otherName}
           </h2>
 
           {/* MENSAJES */}
-          <div className="flex-1 overflow-y-auto min-h-0 pr-2 space-y-4">
-
+          <div className="flex-1 overflow-y-auto min-h-0 pr-1 sm:pr-2 space-y-3 sm:space-y-4">
             {messages.map((m) => {
               const isMine = m.senderId === user?.uid;
 
@@ -398,7 +397,7 @@ const ChatWindow = () => {
                 : "";
 
               const bubbleStyles =
-                "max-w-[75%] p-3 rounded-2xl shadow relative";
+                "max-w-[80%] sm:max-w-[70%] md:max-w-[60%] p-3 sm:p-4 rounded-2xl shadow relative text-sm sm:text-base";
 
               const bubbleColors = isMine
                 ? "bg-gradient-to-r from-[#826c43] to-[#e66748] text-white"
@@ -434,21 +433,25 @@ const ChatWindow = () => {
                                 className="w-full px-2 py-1 rounded bg-white text-black"
                               />
 
-                              {/* Botones */}
-                              <div className="flex gap-2">
+                              <div className="flex flex-wrap gap-2 mt-1 text-xs sm:text-sm">
                                 <button
+                                  type="button"
                                   onClick={() => saveEdit(m)}
                                   className="px-3 py-1 bg-green-600 text-white rounded"
                                 >
                                   Guardar
                                 </button>
+
                                 <button
+                                  type="button"
                                   onClick={cancelEditing}
-                                  className="px-3 py-1 bg-gray-400 rounded"
+                                  className="px-3 py-1 bg-gray-400 text-white rounded"
                                 >
                                   Cancelar
                                 </button>
+
                                 <button
+                                  type="button"
                                   onClick={() => deleteMessage(m)}
                                   className="px-3 py-1 bg-red-600 text-white rounded"
                                 >
@@ -457,6 +460,7 @@ const ChatWindow = () => {
                               </div>
                             </div>
                           )}
+
 
                           {/* -------- EDITANDO IMAGEN ---------- */}
                           {editingId === m.id && m.imageUrl && (
@@ -479,8 +483,9 @@ const ChatWindow = () => {
                                 }
                               />
 
-                              <div className="flex gap-2">
+                              <div className="flex flex-wrap gap-2 mt-1 text-xs sm:text-sm">
                                 <button
+                                  type="button"
                                   onClick={() => saveEdit(m)}
                                   className="px-3 py-1 bg-green-600 text-white rounded"
                                 >
@@ -488,13 +493,15 @@ const ChatWindow = () => {
                                 </button>
 
                                 <button
+                                  type="button"
                                   onClick={cancelEditing}
-                                  className="px-3 py-1 bg-gray-400 rounded"
+                                  className="px-3 py-1 bg-gray-400 text-white rounded"
                                 >
                                   Cancelar
                                 </button>
 
                                 <button
+                                  type="button"
                                   onClick={() => deleteMessage(m)}
                                   className="px-3 py-1 bg-red-600 text-white rounded"
                                 >
@@ -504,6 +511,7 @@ const ChatWindow = () => {
                             </div>
                           )}
 
+
                           {/* -------- MENSAJE NORMAL -------- */}
                           {editingId !== m.id && (
                             <>
@@ -511,7 +519,7 @@ const ChatWindow = () => {
                               {m.imageUrl && (
                                 <img
                                   src={m.imageUrl}
-                                  className="w-60 rounded-xl mb-2 shadow-lg border"
+                                  className="w-40 sm:w-60 rounded-xl mb-2 shadow-lg border"
                                 />
                               )}
 
@@ -536,7 +544,7 @@ const ChatWindow = () => {
           </div>
 
           {/* INPUT + IMAGEN */}
-          <div className="mt-4 flex items-center gap-3 relative">
+          <div className="mt-4 flex flex-wrap items-center gap-2 sm:gap-3 relative">
 
             {/* BOTÓN IMAGEN */}
             <button
@@ -571,7 +579,7 @@ const ChatWindow = () => {
               placeholder={
                 imageFile ? "Imagen lista para enviar…" : "Escribe un mensaje…"
               }
-              className="flex-1 px-4 py-3 border rounded-xl shadow-sm"
+              className="flex-1 min-w-[160px] px-3 sm:px-4 py-2.5 sm:py-3 border rounded-xl shadow-sm text-sm sm:text-base"
             />
 
             {/* BOTÓN ENVIAR */}
@@ -584,16 +592,16 @@ const ChatWindow = () => {
 
             {/* PREVISUALIZACIÓN DE IMAGEN A ENVIAR */}
             {imageFile && (
-              <div className="absolute bottom-20 left-0 w-full bg-white p-4 rounded-xl shadow-lg border flex items-center gap-4">
+              <div className="absolute bottom-20 left-1/2 -translate-x-1/2 w-[95vw] sm:w-auto max-w-[95vw] bg-white p-3 sm:p-4 rounded-xl shadow-lg border flex flex-col sm:flex-row items-center sm:items-start gap-3 sm:gap-4">
                 <img
                   src={URL.createObjectURL(imageFile)}
-                  className="w-32 h-32 object-cover rounded-xl border"
+                  className="w-28 h-28 sm:w-32 sm:h-32 object-cover rounded-xl border"
                 />
 
-                <div className="flex flex-col gap-2">
+                <div className="flex flex-col gap-2 w-full sm:w-auto">
                   <button
                     onClick={sendMessage}
-                    className="px-4 py-2 bg-green-600 text-white rounded-xl shadow"
+                    className="px-4 py-2 bg-green-600 text-white rounded-xl shadow text-sm sm:text-base"
                   >
                     Enviar imagen
                   </button>
@@ -601,10 +609,9 @@ const ChatWindow = () => {
                   <button
                     onClick={() => {
                       setImageFile(null);
-                      if (imageInputRef.current)
-                        imageInputRef.current.value = "";
+                      if (imageInputRef.current) imageInputRef.current.value = "";
                     }}
-                    className="px-4 py-2 bg-red-500 text-white rounded-xl shadow"
+                    className="px-4 py-2 bg-red-500 text-white rounded-xl shadow text-sm sm:text-base"
                   >
                     Cancelar
                   </button>

@@ -14,6 +14,46 @@ import { useAuth } from "../context/AuthContext";
 import "leaflet/dist/leaflet.css";
 import axios from "axios";
 import { Link, useNavigate } from "react-router-dom";
+type FirestoreTimestamp = {
+  _seconds: number;
+  _nanoseconds: number;
+};
+// Convierte segundos UNIX (UTC) a fecha "YYYY-MM-DD" en horario de Bolivia (UTC-4)
+const toBoliviaDateString = (seconds: number): string => {
+  const utcMs = seconds * 1000;
+
+  // Bolivia = UTC-4  → desplazamos -4 horas
+  const boliviaOffsetMinutes = -4 * 60;
+  const boliviaMs = utcMs + boliviaOffsetMinutes * 60 * 1000;
+
+  const d = new Date(boliviaMs);
+
+  const year = d.getUTCFullYear();
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`; // "YYYY-MM-DD"
+};
+
+const normalizeExpiration = (exp: any): string => {
+  if (!exp) return "";
+
+  if (typeof exp === "string") {
+    // "2025-12-09" o "2025-12-09T04:00:00.000Z"
+    return exp.slice(0, 10);
+  }
+
+  if (
+    typeof exp === "object" &&
+    exp !== null &&
+    "_seconds" in exp &&
+    typeof (exp as FirestoreTimestamp)._seconds === "number"
+  ) {
+    const seconds = (exp as FirestoreTimestamp)._seconds;
+    return toBoliviaDateString(seconds);
+  }
+  return "";
+};
 
 const API_URL = "http://localhost:4000/api/donations";
 
@@ -21,15 +61,17 @@ const API_URL = "http://localhost:4000/api/donations";
 const getMarkerColor = (estado: string) => {
   switch (estado) {
     case "Disponible":
-      return "#22c55e";
+      return "#22c55e"; // verde
     case "Pendiente":
-      return "#f97316";
+      return "#f97316"; // naranja
     case "Entregado":
-      return "#3b82f6";
+    case "Entregada":
+      return "#3b82f6"; // azul
     default:
-      return "#6b7280";
+      return "#6b7280"; // gris
   }
 };
+
 
 const CenterCochabamba = () => {
   const map = useMap();
@@ -111,21 +153,20 @@ const navigate = useNavigate();
 
 
   // ⭐ FILTRO REAL PARA OCULTAR VENCIDAS
-    const isExpired = (expirationDate: string) => {
-      if (!expirationDate) return false;
+  // ⭐ FILTRO REAL PARA OCULTAR VENCIDAS (USANDO LA PAZ - BOLIVIA)
+  const isExpired = (expiration: any) => {
+    // Normalizar la fecha de expiración a "YYYY-MM-DD"
+    const expStr = normalizeExpiration(expiration);
+    if (!expStr) return false;
 
-      // Normalizar HOY
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+    // Hoy en Bolivia en formato "YYYY-MM-DD"
+    const todayString = new Date().toLocaleDateString("en-CA", {
+      timeZone: "America/La_Paz",
+    });
 
-      // Forzar fecha local (evita el desplazamiento UTC)
-      const exp = new Date(expirationDate + "T00:00:00");
-      exp.setHours(0, 0, 0, 0);
-
-      return exp < today;
-    };
-
-
+    // Si la fecha de caducidad es anterior a hoy → vencida
+    return expStr < todayString;
+  };
 
    const donacionesConUbicacion = filtradas.filter(
    (d) =>
@@ -141,6 +182,33 @@ const navigate = useNavigate();
 //     typeof d.location.lat === "number" &&
 //     typeof d.location.lng === "number"
 // );
+// ===============================
+// CORRECCIÓN FECHAS (EVITA CAMBIO DE DÍA)
+// ===============================
+// ===============================
+// FORMATEO DE FECHAS PARA MOSTRAR
+// ===============================
+const toLocalDate = (exp: any) => {
+  const str = normalizeExpiration(exp); // "YYYY-MM-DD"
+  if (!str) return null;
+
+  const [year, month, day] = str.split("-").map(Number);
+  return new Date(year, month - 1, day); // fecha local sin UTC raro
+};
+
+const formatExpiration = (exp: any) => {
+  const d = toLocalDate(exp);
+  if (!d) return "Sin fecha";
+
+  return d.toLocaleDateString("es-BO", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "America/La_Paz",
+  });
+};
+
+
 
 const nextImage = (images: string[]) => {
   setActiveImageIndex((prev) => (prev + 1) % images.length);
@@ -208,14 +276,14 @@ const prevImage = (images: string[]) => {
           </div>
 
           {/* LEYENDA */}
-          <div className="flex gap-8 text-gray-700 text-sm items-center">
-            <span className="flex items-center gap-2">
+          <div className="flex flex-wrap gap-3 md:gap-8 text-gray-700 text-sm items-center w-full md:w-auto justify-center md:justify-start">
+            <span className="flex items-center gap-1 md:gap-2">
               <MapPin size={16} className="text-green-600" /> Disponible
             </span>
-            <span className="flex items-center gap-2">
+            <span className="flex items-center gap-1 md:gap-2">
               <MapPin size={16} className="text-orange-500" /> Pendiente
             </span>
-            <span className="flex items-center gap-2">
+            <span className="flex items-center gap-1 md:gap-2">
               <MapPin size={16} className="text-blue-500" /> Entregado
             </span>
           </div>
@@ -358,7 +426,8 @@ const prevImage = (images: string[]) => {
 
                     <p style={{ margin: "6px 0", color: "#4b3f2f", fontSize: "14px" }}>
                       <Calendar size={14} className="inline mr-1 text-[#826c43]" />
-                      <strong>Caduca:</strong> {d.expirationDate || "No especificado"}
+                      <strong>Caduca:</strong> {formatExpiration(d.expirationDate)}
+
                     </p>
 
                     <p style={{ margin: "6px 0", color: "#4b3f2f", fontSize: "14px" }}>
